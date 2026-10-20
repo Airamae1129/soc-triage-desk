@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ExternalLink, ChevronRight, AlertTriangle, Download } from "lucide-react";
+import { ExternalLink, ChevronRight, AlertTriangle, Download, Sparkles } from "lucide-react";
 import { Panel, SevPill, VerdictPill, Pill, Chip, CopyBlock, Field, SlaTimer, escalatedLabel } from "./ui";
 import { fmtDTm, fmtSpan, fmtBytes, fmtNum, sevKey, maskText, download, fmtHM } from "./util";
 import { buildReport, buildEmail, buildHandover, reportChecks } from "./drafts";
@@ -163,6 +163,7 @@ function Drafts({ app }) {
         <>
           <label className="check small"><input type="checkbox" checked={mask} onChange={(e) => setMask(e.target.checked)} data-testid="mask-toggle" /> Mask names &amp; internal IPs</label>
           <button className="btn btn-sm" onClick={() => download(`${f.ticketId || "ticket"}-${tab}.txt`, text)} data-testid={`draft-${tab}-download`}><Download size={13} /> .txt</button>
+          <button className="btn btn-sm" onClick={() => app.askAi({ mode: "draft" })} data-testid="draft-with-ai-btn"><Sparkles size={13} /> Draft with AI</button>
           <button className={`btn btn-sm ${entry.escalatedAt ? "" : "btn-danger"}`} onClick={toggleEscalated} data-testid="mark-escalated-btn">{entry.escalatedAt ? "Undo escalated" : "Mark as escalated"}</button>
         </>
       } />

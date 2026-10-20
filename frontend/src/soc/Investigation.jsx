@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { Panel, Chip, CopyBlock } from "./ui";
 import { analyze, detectSource, findDecodable } from "./engine";
 import { buildQueries, LANGS } from "./queries";
@@ -60,7 +61,7 @@ function Checklist({ app }) {
   );
 }
 
-function Timeline({ an }) {
+function Timeline({ an, onExplain }) {
   return (
     <Panel title="Event timeline" right={<span className="muted small">UTC+08:00</span>} testid="timeline-panel">
       {!an.timeline.length && <p className="muted">No timestamps found in the logs.</p>}
@@ -72,6 +73,7 @@ function Timeline({ an }) {
               <div className="pill-row">
                 {r.techs.map((t) => <span key={t} className="pill sev-high mono">{t}</span>)}
                 {r.blocked && <span className="pill sev-low">Blocked</span>}
+                <button className="btn btn-xs tl-explain" onClick={() => onExplain(r.raw)} data-testid={`timeline-explain-${i}`}><Sparkles size={11} /> Explain</button>
               </div>
               <code className="mono brk tl-line">{r.raw}</code>
             </div>
@@ -143,7 +145,7 @@ export default function Investigation({ app }) {
         </div>
         <div className="col">
           <Checklist app={app} />
-          <Timeline an={an} />
+          <Timeline an={an} onExplain={(line) => app.askAi({ mode: "explain", line })} />
         </div>
       </div>
     </div>

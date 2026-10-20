@@ -13,6 +13,9 @@ import Osint from "@/soc/Osint";
 import Notes from "@/soc/Notes";
 import Playbook from "@/soc/Playbook";
 import Notables from "@/soc/Notables";
+import Dashboard from "@/soc/Dashboard";
+import AiAssistant from "@/soc/AiAssistant";
+import { getConfig } from "@/soc/api";
 
 const TABS = [
   { k: "assessment", label: "Assessment", C: Assessment },
@@ -21,6 +24,8 @@ const TABS = [
   { k: "notes", label: "SOC Notes", C: Notes },
   { k: "playbook", label: "Playbook", C: Playbook },
   { k: "notables", label: "Notables", C: Notables },
+  { k: "dashboard", label: "Dashboard", C: Dashboard },
+  { k: "ai", label: "AI Assistant", C: AiAssistant },
 ];
 
 const seed = load("seeded", false) ? null : seedData();
@@ -48,7 +53,11 @@ export default function App() {
   const [checklist, setChecklist] = usePersist("checklist", {});
   const [analyst, setAnalyst] = usePersist("analyst", "");
   const [theme, setTheme] = usePersist("theme", "system");
+  const [ai, setAi] = usePersist("ai", {});
   const [tab, setTab] = useState("assessment");
+  const [aiRequest, setAiRequest] = useState(null);
+  const [aiConfig, setAiConfig] = useState(null);
+  useEffect(() => { getConfig().then(setAiConfig).catch(() => setAiConfig({ ai: false, osint: {}, screenshot: false })); }, []);
   useEffect(() => { save("seeded", true); }, []);
   useEffect(() => {
     if (theme === "system") delete document.documentElement.dataset.theme;
@@ -91,18 +100,20 @@ export default function App() {
     addNote({ auto: at, type: "Client comms", time: at, text: `Escalated to ${pbRow?.contact || "client"}${pbRow?.email ? ` (${pbRow.email})` : ""} via ${pbRow?.channel || "email"}.` });
   };
   const toggleCheck = (it) => setChecklist((c) => ({ ...c, [tk]: { ...(c[tk] || {}), [it]: !(c[tk] || {})[it] } }));
-  const exportAll = () => ({ app: "soc-triage-desk", version: 1, exportedAt: new Date().toISOString(), history, currentId, playbooks, notes, osint, checklist, analyst });
+  const exportAll = () => ({ app: "soc-triage-desk", version: 1, exportedAt: new Date().toISOString(), history, currentId, playbooks, notes, osint, checklist, analyst, ai });
   const importAll = (d) => {
     if (d.app !== "soc-triage-desk") throw new Error("bad");
     setHistory(d.history || []); setCurrentId(d.currentId || null); setPlaybooks(d.playbooks || {});
-    setNotes(d.notes || {}); setOsint(d.osint || {}); setChecklist(d.checklist || {});
+    setNotes(d.notes || {}); setOsint(d.osint || {}); setChecklist(d.checklist || {}); setAi(d.ai || {});
     const h = (d.history || []).find((x) => x.id === d.currentId);
     if (h) setForm(h.form);
   };
 
   const app = {
     entry, an, form, setForm, generate, loadSample, clearForm, history, loadEntry, updateEntry, toggleEscalated,
-    playbooks, setPlaybooks, pb, pbRow, osintT, setOsintT: (v) => setOsint((o) => ({ ...o, [tk]: v })),
+    playbooks, setPlaybooks, pb, pbRow, osintT, setOsintT: (v) => setOsint((o) => ({ ...o, [tk]: typeof v === "function" ? v(o[tk] || { values: {}, extra: [] }) : v })),
+    aiT: ai[tk] || {}, setAiT: (patch) => setAi((a) => ({ ...a, [tk]: { ...(a[tk] || {}), ...patch } })),
+    aiRequest, setAiRequest, aiConfig, askAi: (req) => { setAiRequest(req); setTab("ai"); },
     ticketNotes, addNote, delNote: (id) => setNotes((ns) => ({ ...ns, [tk]: (ns[tk] || []).filter((n) => n.id !== id) })),
     checklistInfo, toggleCheck, analyst, setTab, exportAll, importAll,
     isSampleForm: [SAMPLE_A, SAMPLE_B].some((s) => s.ticketId === form.ticketId && s.rawLogs === form.rawLogs),
@@ -115,7 +126,7 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "C" || e.key === "c") && entry) {
         e.preventDefault(); copyText(buildReport(an, entry.form)).then(() => toast.success("Assessment report copied")); return;
       }
-      if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && /^[1-6]$/.test(e.key)) setTab(TABS[+e.key - 1].k);
+      if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && /^[1-8]$/.test(e.key)) setTab(TABS[+e.key - 1].k);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -127,6 +138,8 @@ export default function App() {
     osint: an.extIocs.length + (osintT.extra || []).filter((x) => !an.extIocs.some((i) => i.value === x.value)).length,
     notes: ticketNotes.length, playbook: Object.keys(playbooks).length,
     notables: history.filter((h) => h.escalatedAt).length,
+    dashboard: history.filter((h) => shiftOf(h.savedAt).key === nowKey).length,
+    ai: (ai[tk]?.chat || []).length,
   };
   const Cur = TABS.find((t) => t.k === tab).C;
   const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
@@ -147,7 +160,7 @@ export default function App() {
           <label className="who small"><span className="muted">Signed in as</span>
             <input className="input input-sm" value={analyst} onChange={(e) => setAnalyst(e.target.value)} placeholder="Analyst name" data-testid="analyst-identity-input" />
           </label>
-          <span className="badge-local" data-testid="local-only-badge"><span className="dot sev-dot-low" /> Runs in your browser · nothing is sent</span>
+          <span className="badge-local" data-testid="local-only-badge"><span className="dot sev-dot-low" /> Local storage · AI/OSINT calls only when you click</span>
           <button className="btn btn-sm icon-btn" onClick={() => setTheme(nextTheme)} aria-label={`Theme: ${theme}. Switch to ${nextTheme}`} title={`Theme: ${theme}`} data-testid="theme-toggle-btn"><ThemeIcon size={15} /></button>
         </div>
       </header>
@@ -162,7 +175,7 @@ export default function App() {
         {tab !== "assessment" && <ContextStrip app={app} />}
         <Cur app={app} key={tab === "playbook" ? `pb-${tk}` : tab} />
       </main>
-      <footer className="foot muted small">All times UTC+08:00 (Asia/Manila) · Data saved in this browser only · Shortcuts: 1–6 tabs, Ctrl+Enter generate, Ctrl+Shift+C copy report</footer>
+      <footer className="foot muted small">All times UTC+08:00 (Asia/Manila) · Data saved in this browser only · Shortcuts: 1–8 tabs, Ctrl+Enter generate, Ctrl+Shift+C copy report</footer>
       <Toaster position="bottom-right" theme={theme} />
     </div>
   );

@@ -84,7 +84,7 @@ export default function App() {
     const f = { ...form, ticketId: form.ticketId.trim() || `TKT-${Date.now().toString().slice(-6)}`, analyst: form.analyst || analyst };
     const id = f.ticketId;
     const prev = history.find((h) => h.id === id);
-    const e = { escalatedAt: null, notableStatus: "Awaiting client", ...prev, id, form: f, savedAt: new Date().toISOString(), sample: !!prev?.sample && JSON.stringify(prev.form) === JSON.stringify(f), ...snapshot(f) };
+    const e = { escalatedAt: null, notableStatus: "Awaiting client", ...prev, id, form: f, savedAt: new Date().toISOString(), createdAt: prev?.createdAt || prev?.savedAt || new Date().toISOString(), sample: !!prev?.sample && JSON.stringify(prev.form) === JSON.stringify(f), ...snapshot(f) };
     setHistory((hs) => [e, ...hs.filter((h) => h.id !== id)]);
     setCurrentId(id);
     setForm(f);
@@ -138,7 +138,7 @@ export default function App() {
     osint: an.extIocs.length + (osintT.extra || []).filter((x) => !an.extIocs.some((i) => i.value === x.value)).length,
     notes: ticketNotes.length, playbook: Object.keys(playbooks).length,
     notables: history.filter((h) => h.escalatedAt).length,
-    dashboard: history.filter((h) => shiftOf(h.savedAt).key === nowKey).length,
+    dashboard: history.filter((h) => shiftOf(h.createdAt || h.savedAt).key === nowKey).length,
     ai: (ai[tk]?.chat || []).length,
   };
   const Cur = TABS.find((t) => t.k === tab).C;
@@ -175,7 +175,7 @@ export default function App() {
         {tab !== "assessment" && <ContextStrip app={app} />}
         <Cur app={app} key={tab === "playbook" ? `pb-${tk}` : tab} />
       </main>
-      <footer className="foot muted small">All times UTC+08:00 (Asia/Manila) · Data saved in this browser only · Shortcuts: 1–8 tabs, Ctrl+Enter generate, Ctrl+Shift+C copy report</footer>
+      <footer className="foot muted small">All times UTC+08:00 (Asia/Manila) · Data saved in this browser; AI and OSINT calls go out only when you click · Shortcuts: 1–8 tabs, Ctrl+Enter generate, Ctrl+Shift+C copy report</footer>
       <Toaster position="bottom-right" theme={theme} />
     </div>
   );

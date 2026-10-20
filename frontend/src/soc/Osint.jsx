@@ -70,7 +70,7 @@ function Card({ ioc, val, onChange, onRemove, i, onAuto, busy, onShot, shot }) {
         {LINKS[kind(ioc.type)](ioc.value).map(([n, u]) => <a key={n} className="btn btn-xs" href={u} target="_blank" rel="noopener noreferrer" data-testid={`osint-link-${i}-${n.replace(/\W/g, "").toLowerCase()}`}>{n} <ExternalLink size={11} /></a>)}
       </div>
       <div className="ocard-f">
-        <select className="input" value={v} onChange={(ev) => onChange({ ...val, verdict: ev.target.value, note: val?.note || "" })} aria-label="Verdict" data-testid={`osint-verdict-${i}`}>{VERDICTS.map((x) => <option key={x}>{x}</option>)}</select>
+        <select className="input" value={v} onChange={(ev) => onChange({ ...val, verdict: ev.target.value, note: val?.note || "", manual: ev.target.value !== "Not checked" })} aria-label="Verdict" data-testid={`osint-verdict-${i}`}>{VERDICTS.map((x) => <option key={x}>{x}</option>)}</select>
         <input className="input" placeholder="Finding note (e.g. AbuseIPDB 0%, VT 0/94)" value={val?.note || ""} onChange={(ev) => onChange({ ...val, verdict: v, note: ev.target.value })} data-testid={`osint-note-${i}`} />
       </div>
     </article>
@@ -98,8 +98,8 @@ export default function Osint({ app }) {
       const r = await osintLookup(ioc.type, ioc.value, force);
       setOsintT((o) => {
         const cur = (o.values || {})[ioc.value] || {};
-        const keepManual = cur.verdict && cur.verdict !== "Not checked" && !cur.auto;
-        return { ...o, values: { ...(o.values || {}), [ioc.value]: { verdict: keepManual ? cur.verdict : r.verdict, note: keepManual && cur.note ? cur.note : r.note, auto: { sources: r.sources, errors: r.errors, fetched_at: r.fetched_at, cached: r.cached } } } };
+        const keepManual = cur.manual || (cur.verdict && cur.verdict !== "Not checked" && !cur.auto);
+        return { ...o, values: { ...(o.values || {}), [ioc.value]: { verdict: keepManual ? cur.verdict : r.verdict, note: keepManual && cur.note ? cur.note : r.note, manual: !!keepManual, auto: { sources: r.sources, errors: r.errors, fetched_at: r.fetched_at, cached: r.cached } } } };
       });
     } catch (e) { setAutoErr(`${ioc.value}: ${e.message}`); }
     finally { setBusy((b) => ({ ...b, [ioc.value]: false })); }

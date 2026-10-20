@@ -18,7 +18,7 @@ function metrics(list) {
 }
 
 export default function Dashboard({ app }) {
-  const rows = useMemo(() => app.history.map((h) => ({ ...h, firstTs: analyze(h.form).window?.start || null, shiftKey: shiftOf(h.savedAt).key })), [app.history]);
+  const rows = useMemo(() => app.history.map((h) => ({ ...h, firstTs: analyze(h.form).window?.start || null, shiftKey: shiftOf(h.createdAt || h.savedAt).key })), [app.history]);
   const keys = useMemo(() => [...new Set([shiftOf(new Date()).key, ...rows.map((r) => r.shiftKey)])].sort(sortKeys), [rows]);
   const withData = keys.filter((k) => rows.some((r) => r.shiftKey === k));
   const [key, setKey] = useState(withData[0] || keys[0]);

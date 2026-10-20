@@ -13,14 +13,14 @@ function useAiRun() {
   const ctl = useRef();
   const run = async (body, onDelta) => {
     ctl.current?.abort();
-    ctl.current = new AbortController();
+    const c = new AbortController();
+    ctl.current = c;
     setBusy(true); setErr("");
-    try { return await streamAi(body, onDelta, ctl.current.signal); }
+    try { return await streamAi(body, onDelta, c.signal); }
     catch (e) { if (e.name !== "AbortError") setErr(e.message || "AI request failed"); return null; }
-    finally { setBusy(false); }
+    finally { if (ctl.current === c) setBusy(false); }
   };
   const stop = () => { ctl.current?.abort(); setBusy(false); };
-  useEffect(() => () => ctl.current?.abort(), []);
   return { busy, err, run, stop };
 }
 
@@ -40,6 +40,7 @@ function Chat({ app, ctx, mask }) {
     setInput(""); setLive("");
     const out = await run({ mode: "chat", context: ctx(), messages: next }, setLive);
     if (out) setAiT({ chat: [...next, { role: "assistant", content: out }] });
+    else { setAiT({ chat: msgs }); setInput(q); }
     setLive("");
   };
   return (
@@ -72,8 +73,9 @@ function Draft({ app, ctx }) {
     if (out) setAiT({ draft: cleanAi(out).trim(), draftAt: new Date().toISOString() });
     setLive("");
   };
+  const consumed = useRef();
   useEffect(() => {
-    if (aiRequest?.mode === "draft") { setAiRequest(null); go(); }
+    if (aiRequest?.mode === "draft" && consumed.current !== aiRequest) { consumed.current = aiRequest; setAiRequest(null); go(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiRequest]);
   const text = busy ? cleanAi(live) : aiT.draft || "";
@@ -115,8 +117,9 @@ function Explain({ app, mask }) {
     if (out) setAiT({ explains: { ...explains, [line]: cleanAi(out).trim() } });
     setLive("");
   };
+  const consumed = useRef();
   useEffect(() => {
-    if (aiRequest?.mode === "explain") { const l = aiRequest.line; setAiRequest(null); go(l); }
+    if (aiRequest?.mode === "explain" && consumed.current !== aiRequest) { consumed.current = aiRequest; const l = aiRequest.line; setAiRequest(null); go(l); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiRequest]);
   const rows = an.timeline.length ? an.timeline : an.lines.map((raw) => ({ raw }));

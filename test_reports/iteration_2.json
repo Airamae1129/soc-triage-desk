@@ -1,0 +1,33 @@
+{
+  "summary": "Tested the new AI Assistant, OSINT auto-fill/screenshot and Dashboard features, plus a regression smoke test. Backend: 17/17 pytest tests pass. /api/config flags are correct. OSINT IP/domain/URL/hash lookups work: VT gives 'API key not configured', the cache returns cached:true, force bypasses the cache, private and invalid IPs give 400. AI draft/chat/explain stream SSE and end with {done:true}; the 400/422 guards work. The screenshot needs confirmed:true. Exactly ONE real screenshot was taken (https://example.com, 200 image/png 1280x800); usage went 0 -> 1. Frontend: 8 tabs; keys 1-8 work; header badge updated. Dashboard Jun 2 Morning = 4 alerts, 50% TP, 25% FP, 3 escalated, 13 min (matches); chart, table and top lists render. AI tab: manual Draft streams a correct-format report (Assessment:/Verdict:/Alert Details) with the review note and Copy. Chat send and quick prompt stream and persist after reload; Clear chat works; mask preview chips work; Explain line works; timeline Explain jumps and explains. OSINT: Auto-fill, Refresh, Auto-fill all (4 IOCs), source details with Fetched/Cached + 'cache 24 h', tally and summary update; the Screenshot dialog opens, and Cancel/Esc close it without an API call. Two real bugs were found (below).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AiAssistant useAiRun (AiAssistant.jsx L14-22)", "issue": "Abort race: run() aborts the previous controller, but the aborted run's finally{setBusy(false)} fires AFTER the new run set busy=true. busy is then false while the new stream is still running. In dev React.StrictMode the aiRequest effect runs twice (two POST /api/ai/stream seen in the backend log). So 'Draft with AI' from the Assessment tab (draft-with-ai-btn) shows NO Stop button and NO live streaming for ~22 s, then the whole report appears at once. The timeline-explain jump has the same problem: the explain output is empty with no 'Explaining…'. It also happens in prod whenever the user clicks a second Explain line while the first is still streaming. It wastes a duplicate LLM call. Fix: const c = new AbortController(); ctl.current = c; ... finally { if (ctl.current === c) setBusy(false); }. Also guard the aiRequest effect against the double run (e.g. use a ref or consume the request once).", "selector": "[data-testid='draft-with-ai-btn'], [data-testid^='timeline-explain-']", "priority": "MEDIUM"},
+      {"component": "Osint auto() keepManual (Osint.jsx L101)", "issue": "A manual verdict is only kept on the FIRST Auto-fill. Reproduced: set Suspicious + 'manual note', click Auto-fill (kept, correct), click Refresh -> the verdict becomes Clean and the note is overwritten. keepManual is false once cur.auto exists, so a manual verdict set before OR after auto-fill is lost on Refresh / Auto-fill all. Fix: track a manual flag (e.g. set val.manual=true in the verdict onChange) and keep the verdict when manual is true.", "selector": "[data-testid='osint-refresh-0']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard", "issues": ["Re-generating an old ticket moves its savedAt to the current shift, so it leaves its original shift's stats (e.g. regenerating INC-24131 drops Jun 2 Morning to 3 alerts). Consider keeping the first-assessed time for shift bucketing."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_soc_ai_osint.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Fix the useAiRun abort/busy race and the StrictMode double-fire of the aiRequest effect (Draft-with-AI jump and timeline Explain jump show no streaming and make duplicate LLM calls)",
+    "Keep manual OSINT verdicts across Refresh / repeated Auto-fill (add a manual flag)",
+    "Optional: when a chat stream errors, the user message stays persisted with no answer, and a retry duplicates it. Consider removing it or adding a retry button."
+  ],
+  "critical_code_review_comments": [
+    "AiAssistant.jsx useAiRun: the finally block resets busy for any run, including aborted stale runs (the root cause of bug 1).",
+    "Osint.jsx keepManual = cur.verdict && !cur.auto: the manual intent is lost after the first auto-fill.",
+    "server.py osint_lookup runs the providers one after another; asyncio.gather would cut latency (about 2-3 s per IP now).",
+    "server.py screenshot has no URL validation beyond adding https://, so any host can be passed. This is acceptable given the user confirmation, but blocking private/localhost targets would be good hygiene.",
+    "The quota usage counter is per UTC day, while the app works in Manila time. This is cosmetic."
+  ],
+  "updated_files": ["/app/backend/tests/test_soc_ai_osint.py"],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "~90% (all flows work; 2 medium bugs)"},
+  "seed_data_creation": "OSINT cache entries in Mongo osint_cache (8.8.8.8, 8.8.4.4, example.com/org, example.net/login, 101.72.194.189). screenshot_usage count=1 for today. Browser localStorage was re-seeded each run.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Screenshot quota: 1 real call already used (example.com). Test only Cancel next time. Each browser_automation run gets a fresh context, so localStorage does not carry across runs; test persistence with page.reload() inside one run. Sample buttons: sample-first-seen-btn / sample-rdp-btn. The system clock is Oct 2026. The AI takes ~10-25 s."
+}

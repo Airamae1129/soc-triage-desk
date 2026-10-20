@@ -93,7 +93,7 @@ export default function Investigation({ app }) {
   const an = useMemo(() => (mode === "ticket" ? app.an : analyze({ rawLogs: applied })), [mode, app.an, applied]);
   useEffect(() => {
     const d = detectSource(srcText);
-    if (d && d !== lang) { setLang(d); setHint(`Detected ${LANGS.find((l) => l.k === d).label} logs. Switched the query language.`); }
+    if (d) { setLang(d); setHint(`Detected ${LANGS.find((l) => l.k === d).label} logs. Switched the query language.`); } else setHint("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [srcText]);
   const queries = useMemo(() => buildQueries(an, lang), [an, lang]);

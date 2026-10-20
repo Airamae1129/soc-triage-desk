@@ -215,7 +215,7 @@ export function analyze(form) {
   ];
 
   const warnings = [];
-  const numRe = /(\d[\d,]*)\s*(connections?|events?|attempts?|logons?|sign-?ins?|failures?)/i;
+  const numRe = /(\d[\d,]*)\s+(?:[a-z-]+\s+){0,2}?(connections?|events?|attempts?|logons?|sign-?ins?|failures?)/i;
   const nm = title.match(numRe);
   if (nm) {
     const claimed = +nm[1].replace(/,/g, "");

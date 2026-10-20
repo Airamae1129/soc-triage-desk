@@ -93,7 +93,7 @@ export const download = (name, text, type = "text/plain") => {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-export function maskText(text, { client, users = [], hosts = [], ips = [] }) {
+export function maskText(text, { client, others = [], users = [], hosts = [], ips = [] }) {
   const items = [];
   let out = text;
   const rep = (val, token) => {
@@ -101,6 +101,7 @@ export function maskText(text, { client, users = [], hosts = [], ips = [] }) {
     const re = new RegExp(esc(val), "gi");
     if (re.test(out)) { items.push({ val, token }); out = out.replace(re, token); }
   };
+  others.filter(Boolean).forEach((o, i) => rep(o, `[CONTACT-${i + 1}]`));
   rep(client, "[CLIENT]");
   users.forEach((u, i) => rep(u, `[USER-${i + 1}]`));
   hosts.forEach((h, i) => rep(h, `[HOST-${i + 1}]`));

@@ -71,6 +71,7 @@ export default function App() {
   const addNote = (n) => setNotes((ns) => ({ ...ns, [tk]: [...(ns[tk] || []), { id: uid(), author: analyst || entry?.form.analyst || "", ...n }] }));
 
   const generate = () => {
+    if (!form.rawLogs.trim()) { toast.error("Paste raw logs before generating an assessment."); return; }
     const f = { ...form, ticketId: form.ticketId.trim() || `TKT-${Date.now().toString().slice(-6)}`, analyst: form.analyst || analyst };
     const id = f.ticketId;
     const prev = history.find((h) => h.id === id);
@@ -84,10 +85,10 @@ export default function App() {
   const clearForm = () => setForm({ ...EMPTY_FORM, analyst });
   const toggleEscalated = () => {
     if (!entry) return;
-    if (entry.escalatedAt) { updateEntry(entry.id, { escalatedAt: null }); return; }
+    if (entry.escalatedAt) { updateEntry(entry.id, { escalatedAt: null }); setNotes((ns) => ({ ...ns, [tk]: (ns[tk] || []).filter((n) => n.auto !== entry.escalatedAt) })); return; }
     const at = new Date().toISOString();
     updateEntry(entry.id, { escalatedAt: at, notableStatus: "Awaiting client", statusLog: [...(entry.statusLog || []), { status: "Escalated", by: analyst || entry.form.analyst, at }] });
-    addNote({ type: "Client comms", time: at, text: `Escalated to ${pbRow?.contact || "client"}${pbRow?.email ? ` (${pbRow.email})` : ""} via ${pbRow?.channel || "email"}.` });
+    addNote({ auto: at, type: "Client comms", time: at, text: `Escalated to ${pbRow?.contact || "client"}${pbRow?.email ? ` (${pbRow.email})` : ""} via ${pbRow?.channel || "email"}.` });
   };
   const toggleCheck = (it) => setChecklist((c) => ({ ...c, [tk]: { ...(c[tk] || {}), [it]: !(c[tk] || {})[it] } }));
   const exportAll = () => ({ app: "soc-triage-desk", version: 1, exportedAt: new Date().toISOString(), history, currentId, playbooks, notes, osint, checklist, analyst });

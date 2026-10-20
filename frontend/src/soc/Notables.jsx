@@ -49,7 +49,7 @@ export default function Notables({ app }) {
                   <p className="muted small">{h.summary}</p>
                   <div className="notable-f">
                     <select className="input input-sm" value={h.notableStatus || "Awaiting client"} aria-label="Status"
-                      onChange={(e) => updateEntry(h.id, { notableStatus: e.target.value, statusLog: [...(h.statusLog || []), { status: e.target.value, by: analyst, at: new Date().toISOString() }] })}
+                      onChange={(e) => updateEntry(h.id, { notableStatus: e.target.value, statusLog: [...(h.statusLog || []), { status: e.target.value, by: analyst || h.form.analyst, at: new Date().toISOString() }] })}
                       data-testid={`notable-status-${h.id}`}>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
                     <span className="muted small">{h.form.analyst || "—"}</span>
                     <SlaTimer escalatedAt={h.escalatedAt} sla={slaOf(h)} status={h.notableStatus} testid={`notable-sla-${h.id}`} />

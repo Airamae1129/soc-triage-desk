@@ -140,7 +140,7 @@ function Drafts({ app }) {
     email: buildEmail(an, f, { pbRow: app.pbRow, osint: app.osintT.values, analyst: f.analyst }),
     handover: buildHandover(an, f, { entry, checklist: app.checklistInfo, osint: app.osintT.values, notes: app.ticketNotes, pbRow: app.pbRow }),
   }), [an, f, app.pbRow, app.osintT, entry, app.checklistInfo, app.ticketNotes]);
-  const masked = mask ? maskText(texts[tab], { client: f.client, users: an.users, hosts: an.hosts, ips: an.ips.internal }) : null;
+  const masked = mask ? maskText(texts[tab], { client: f.client, others: [app.pbRow?.email, app.pbRow?.contact, (app.pbRow?.email || "").split("@")[1]], users: an.users, hosts: an.hosts, ips: an.ips.internal }) : null;
   const text = masked ? masked.text : texts[tab];
   const checks = tab === "report" ? reportChecks(an, f) : [];
   const names = { report: "Assessment report", email: "Client escalation email", handover: "Shift handover note" };

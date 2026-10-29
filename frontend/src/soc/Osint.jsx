@@ -14,8 +14,8 @@ const LINKS = {
   URL: (v) => [["VirusTotal", `https://www.virustotal.com/gui/search/${e(v)}`], ["urlscan.io", `https://urlscan.io/search/#${e(`page.url:"${v}"`)}`], ["URLhaus", `https://urlhaus.abuse.ch/browse.php?search=${e(v)}`]],
   Hash: (v) => [["VirusTotal", `https://www.virustotal.com/gui/file/${v}`], ["MalwareBazaar", `https://bazaar.abuse.ch/browse.php?search=${e(`sha256:${v}`)}`], ["Hybrid Analysis", `https://www.hybrid-analysis.com/search?query=${v}`], ["OTX", `https://otx.alienvault.com/indicator/file/${v}`]],
 };
-const VERDICTS = ["Not checked", "Clean", "Suspicious", "Malicious"];
-const tone = { "Not checked": "neutral", Clean: "low", Suspicious: "medium", Malicious: "critical" };
+const VERDICTS = ["Not checked", "Clean", "Low risk", "Malicious"];
+const tone = { "Not checked": "neutral", Clean: "low", "Low risk": "medium", Malicious: "critical" };
 const LABEL = { ip: "IP", domain: "Domain", url: "URL", hash: "Hash" };
 const STATUS = { ok: "ok", error: "error", not_configured: "Not configured", rate_limited: "rate limited" };
 const STATUS_TONE = { ok: "low", error: "critical", not_configured: "neutral", rate_limited: "medium" };

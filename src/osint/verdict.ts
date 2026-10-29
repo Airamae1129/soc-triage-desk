@@ -1,6 +1,6 @@
 import type { AbuseData, IndicatorType, OtxData, ProviderResult, ShodanData, UrlscanData, VtData } from "./types.js";
 
-export type Verdict = "Not checked" | "Clean" | "Suspicious" | "Malicious";
+export type Verdict = "Not checked" | "Clean" | "Low risk" | "Malicious";
 
 const okData = <T>(results: ProviderResult[], name: string) => {
   const r = results.find((x) => x.provider === name && x.status === "ok");
@@ -11,8 +11,8 @@ const DAY = 86400e3;
 /**
  * Suggested verdict (the analyst can override it):
  *  - Malicious  if VT malicious ≥ 3 OR AbuseIPDB confidence ≥ 75
- *  - Suspicious if VT malicious 1–2 OR AbuseIPDB 25–74 OR the domain is < 30 days old
- *               (also when urlscan.io has scans flagged malicious or OTX has pulses: "flagged")
+ *  - Low risk   if anything flagged it below that: VT malicious 1–2 or suspicious detections,
+ *               AbuseIPDB 1–74, the domain is < 30 days old, urlscan.io scans flagged malicious, OTX pulses
  *  - Clean      if every configured provider for this type answered and none flagged it
  *  - otherwise Not checked
  */
@@ -25,7 +25,8 @@ export function suggestVerdict(results: ProviderResult[], now = Date.now()): Ver
   const score = abuse?.score ?? 0;
   if (vtMal >= 3 || score >= 75) return "Malicious";
   const young = !!vt?.creationDate && now - Date.parse(vt.creationDate) < 30 * DAY;
-  if (vtMal >= 1 || score >= 25 || young || (us?.malicious ?? 0) > 0 || (otx?.pulses ?? 0) > 0) return "Suspicious";
+  const vtSus = vt?.found ? vt.suspicious : 0;
+  if (vtMal >= 1 || vtSus > 0 || score >= 1 || young || (us?.malicious ?? 0) > 0 || (otx?.pulses ?? 0) > 0) return "Low risk";
   const configured = results.filter((r) => r.status !== "not_configured");
   if (configured.length && configured.every((r) => r.status === "ok")) return "Clean";
   return "Not checked";

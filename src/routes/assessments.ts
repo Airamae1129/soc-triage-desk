@@ -199,7 +199,7 @@ assessmentsRouter.put("/:id/osint/:indicator", h(async (req, res) => {
   const id = idParam(req.params.id);
   const a = await load(id);
   const { indicator, type } = validateIndicator(decodeURIComponent(String(req.params.indicator)));
-  const b = z.object({ verdict: z.enum(["Not checked", "Clean", "Suspicious", "Malicious"]), note: z.string().max(2000).optional().default(""), providerData: z.unknown().optional() }).parse(req.body);
+  const b = z.object({ verdict: z.enum(["Not checked", "Clean", "Low risk", "Malicious"]), note: z.string().max(2000).optional().default(""), providerData: z.unknown().optional() }).parse(req.body);
   const data = { verdict: b.verdict, analystNote: b.note, manual: true, checkedAt: new Date(), checkedBy: user.id, ...(b.providerData !== undefined ? { providerData: b.providerData as Prisma.InputJsonValue } : {}) };
   await prisma.osintResult.upsert({
     where: { scope_indicator: { scope: `as:${id}`, indicator } },

@@ -16,7 +16,7 @@ import type { ProviderName } from "../osint/types.js";
 export const osintRouter = Router();
 
 const TYPES = ["ip", "domain", "url", "hash"] as const;
-const VERDICTS = ["Not checked", "Clean", "Suspicious", "Malicious"] as const;
+const VERDICTS = ["Not checked", "Clean", "Low risk", "Malicious"] as const;
 const PROVIDER_NAMES = ["abuseipdb", "virustotal", "urlscan", "shodan", "otx"] as const;
 const dayStart = () => { const d = new Date(); d.setUTCHours(0, 0, 0, 0); return d; };
 

@@ -88,10 +88,13 @@ describe("OSINT", () => {
     const ok = (provider: string, data: unknown) => ({ provider, label: provider, status: "ok", data }) as never;
     expect(suggestVerdict([ok("abuseipdb", { score: 80 }), ok("virustotal", { found: true, malicious: 0 })])).toBe("Malicious");
     expect(suggestVerdict([ok("virustotal", { found: true, malicious: 3 })])).toBe("Malicious");
-    expect(suggestVerdict([ok("virustotal", { found: true, malicious: 1 })])).toBe("Suspicious");
-    expect(suggestVerdict([ok("abuseipdb", { score: 30 })])).toBe("Suspicious");
-    expect(suggestVerdict([ok("virustotal", { found: true, malicious: 0, creationDate: new Date(Date.now() - 5 * 86400e3).toISOString() })])).toBe("Suspicious");
+    expect(suggestVerdict([ok("virustotal", { found: true, malicious: 1 })])).toBe("Low risk");
+    expect(suggestVerdict([ok("abuseipdb", { score: 30 })])).toBe("Low risk");
+    expect(suggestVerdict([ok("virustotal", { found: true, malicious: 0, creationDate: new Date(Date.now() - 5 * 86400e3).toISOString() })])).toBe("Low risk");
     expect(suggestVerdict([ok("abuseipdb", { score: 0 }), ok("virustotal", { found: true, malicious: 0 })])).toBe("Clean");
+    expect(suggestVerdict([ok("abuseipdb", { score: 10 }), ok("virustotal", { found: true, malicious: 0 })])).toBe("Low risk");
+    expect(suggestVerdict([ok("abuseipdb", { score: 0 }), ok("virustotal", { found: true, malicious: 0, suspicious: 1 })])).toBe("Low risk");
+    expect(suggestVerdict([ok("abuseipdb", { score: 24 })])).toBe("Low risk");
     expect(summaryLine([ok("abuseipdb", { score: 0, reports: 0 }), ok("virustotal", { found: true, malicious: 0, suspicious: 0, total: 94 })]))
       .toBe("AbuseIPDB – 0 reports, 0% confidence score · VirusTotal – 0/94 malicious");
   });

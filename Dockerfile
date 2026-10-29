@@ -31,10 +31,15 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/prisma ./prisma
+# src/ is only for the sample-data seed (run with tsx); the server runs from dist/.
+COPY --from=build --chown=node:node /app/src ./src
+COPY --from=build --chown=node:node /app/tsconfig.json ./tsconfig.json
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 # Apply any pending migrations, then start. Seeding and create-admin are run on demand:
 #   docker compose exec app npm run create-admin -- --username <name>
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/server.js"]
+# SEED_SAMPLE_DATA=true also loads the sample tickets and playbooks (used on Render's free plan,
+# where the database starts empty after every restart).
+CMD ["sh", "-c", "npx prisma migrate deploy && if [ \"$SEED_SAMPLE_DATA\" = true ]; then npx tsx prisma/seed.ts; fi && node dist/src/server.js"]

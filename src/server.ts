@@ -13,6 +13,7 @@ import { errorHandler, notFoundApi } from "./lib/errors.js";
 import { PrismaSessionStore } from "./auth/session-store.js";
 import { requireAuth, requireAdmin, requireXhrHeader } from "./auth/middleware.js";
 import { authRouter } from "./auth/routes.js";
+import { bootstrapAccounts } from "./auth/bootstrap.js";
 import { assessmentsRouter } from "./routes/assessments.js";
 import { notesRouter } from "./routes/notes.js";
 import { playbooksRouter } from "./routes/playbooks.js";
@@ -129,6 +130,7 @@ export function createApp() {
 const isMain = process.argv[1] && path.resolve(process.argv[1]).replace(/\.[jt]s$/, "") === fileURLToPath(import.meta.url).replace(/\.[jt]s$/, "");
 if (isMain) {
   const { app } = createApp();
+  try { await bootstrapAccounts(); } catch (e) { logger.error({ err: e }, "Couldn't create the accounts from the environment"); }
   const server = app.listen(config.PORT, () => {
     logger.info(`SOC Triage Playbook running at http://localhost:${config.PORT} (AI: ${getAiProvider().name})`);
   });

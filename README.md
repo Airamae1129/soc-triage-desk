@@ -192,6 +192,29 @@ The database lives in the `socdesk-data` volume at `/data/soc.db`, so it survive
 
 ---
 
+## Deploying on Render (free)
+
+`render.yaml` describes the whole service, so Render sets it up from the repository.
+
+1. Sign in at [dashboard.render.com](https://dashboard.render.com) with GitHub.
+2. **New → Blueprint**, pick `Airamae1129/soc-triage-desk`, then **Apply**.
+3. Render asks for the values marked `sync: false`. Fill in:
+   - `ADMIN_USERNAME` and `ADMIN_PASSWORD` (12+ characters) for your admin login.
+   - `ANALYST_USERNAME` and `ANALYST_PASSWORD` for a normal user (optional).
+   - The OSINT keys you want online (leave the others empty).
+4. Wait for the first build (about 10 minutes), then open the `onrender.com` link.
+
+Things to know about the free plan:
+
+- **The data is temporary.** Render wipes the disk on every restart, deploy and sleep, so
+  tickets, notes, OSINT results and accounts added in the Admin screen disappear. The accounts in
+  `ADMIN_*` / `ANALYST_*` and the sample tickets come back at every start.
+- **It sleeps after 15 minutes idle.** The next visit takes about a minute to wake it, and you
+  have to sign in again.
+- **The AI Assistant is off online** (`AI_PROVIDER=none`): the local Ollama model only runs on
+  your PC.
+- Every push to `main` deploys again automatically.
+
 ## Moving to a company server
 
 - **PostgreSQL:** in `prisma/schema.prisma` change `provider = "sqlite"` to `"postgresql"`, set `DATABASE_URL=postgresql://user:pass@host:5432/socdesk`, delete `prisma/migrations`, and run `npx prisma migrate dev --name init` once. Status, verdict and role fields are plain strings validated in code, so nothing in the schema is SQLite-specific.

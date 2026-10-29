@@ -47,6 +47,14 @@ const schema = z.object({
   OLLAMA_TIMEOUT_MS: int(600000, 10000),
   AI_MAX_LOG_LINES: int(200, 10),
   AI_REFUSAL_FALLBACK: bool(true),
+
+  // Accounts created at startup (see src/auth/bootstrap.ts). Empty = none.
+  ADMIN_USERNAME: optKey,
+  ADMIN_PASSWORD: optKey,
+  ADMIN_DISPLAY_NAME: optKey,
+  ANALYST_USERNAME: optKey,
+  ANALYST_PASSWORD: optKey,
+  ANALYST_DISPLAY_NAME: optKey,
 });
 
 export type Config = z.infer<typeof schema>;
@@ -77,6 +85,7 @@ export const config: Config = load();
 export const SECRET_SETTINGS = [
   "SESSION_SECRET", "ABUSEIPDB_API_KEY", "VIRUSTOTAL_API_KEY", "URLSCAN_API_KEY", "SHODAN_API_KEY",
   "OTX_API_KEY", "SCREENSHOTBASE_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
+  "ADMIN_PASSWORD", "ANALYST_PASSWORD",
 ] as const;
 
 /** All configured secret values, used by the logger and tests to make sure none leak. */

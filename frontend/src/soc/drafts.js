@@ -11,39 +11,65 @@ export const mitreTag = (f, an) => {
 };
 export const verdictLine = (an) => `Verdict: ${an.verdict} (${an.severity.toLowerCase()} risk). ${an.reason}, ${lc(an.closure)}.`;
 
+// "Alert Details / Indicators": every value is read from the pasted raw logs. A typed form field is
+// used only when the logs don't carry that detail; ASN / Owner / Location / Reputation come from OSINT.
+const counted = (pairs, max = 8) => {
+  if (!pairs?.length) return "";
+  const shown = pairs.slice(0, max).map(([v, n]) => (pairs.length > 1 || n > 1 ? `${v} (${n})` : v));
+  return shown.join(", ") + (pairs.length > max ? ` and ${pairs.length - max} more` : "");
+};
+const first = (pairs) => pairs?.[0]?.[0] || "";
+const short = (s, n = 160) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
 function details(an, f) {
+  const m = an.logMeta || {};
   const fw = an.fw;
+  const techName = (id) => an.techniques.find((t) => t.id === id)?.name;
+  const mitre = m.mitre?.length ? m.mitre.map((id) => [id, techName(id)].filter(Boolean).join(" ")).join(", ")
+    : an.techniques.length ? an.techniques.map((t) => `${t.id} ${t.name}`).join(", ") : f.mitre;
+  // A firewall or CEF device names itself; the SIEM guess from field names is only a fallback.
+  const logSource = m.vendor || m.source;
   const rows = [
-    ["Alert", f.alertName], ["Alert ID", f.alertId], ["Analytics rule", f.analyticsRule],
-    ["Detection source", f.detectionSource], ["Service source", f.serviceSource], ["Category", f.category],
-    ["MITRE ATT&CK", f.mitre || an.techniques.map((t) => `${t.id} ${t.name}`).join(", ")],
-    ["Severity", f.alertSeverity || an.severity], ["Status", f.status], ["Classification", f.classification],
-    ["Incident created", f.incidentCreated], ["Activity window (alert)", f.activityWindow],
+    ["Alert", first(m.alert) || f.alertName], ["Alert ID", first(m.alertId) || f.alertId], ["Analytics rule", first(m.rule) || f.analyticsRule],
+    ["Detection source", first(m.detection) || f.detectionSource], ["Service source", f.serviceSource],
+    ["Log source", logSource || f.logSource],
+    ["Category", first(m.category) || f.category], ["Tactics", counted(m.tactics, 4)], ["MITRE ATT&CK", mitre],
+    ["Severity", first(m.severity) || f.alertSeverity || `${an.severity} (estimated from the logs)`], ["Status", first(m.status) || f.status],
+    ["Classification", first(m.classification) || f.classification], ["Incident created", f.incidentCreated],
+    ["Activity window (logs)", winText(an) || f.activityWindow], ["Events in logs", an.events ? fmtNum(an.events) : ""],
+    ["Event IDs / types", counted(m.eventIds)],
   ];
   if (fw) {
     rows.push(
-      ["Activity window (firewall logs)", winText(an)], ["Destination IP", fw.dst], ["ASN", f.asn], ["Owner", f.owner],
-      ["Location", f.location], ["IP type", f.ipType], ["Reputation", f.reputation],
-      ["Source IPs (internal)", fw.sources.map((s) => s.ip).join(", ")], ["Destination port", fw.ports.join(", ")],
-      ["Protocol", fw.protos.join(", ")],
-      ["Total connections", `${fw.total} (${fw.sources.map((s) => `${s.ip}: ${s.conns}`).join(", ")})`],
+      ["Destination IP", fw.dst], ["ASN", f.asn], ["Owner", f.owner], ["Location", f.location], ["IP type", f.ipType], ["Reputation", f.reputation],
+      ["Source IPs (internal)", fw.sources.map((s) => `${s.ip} (${s.conns})`).join(", ")], ["Destination port", fw.ports.join(", ")],
+      ["Protocol", fw.protos.join(", ")], ["Service", fw.service],
+      ["Total connections", fmtNum(fw.total)],
       ["Bytes sent / received", `${fmtNum(fw.sent)} B (~${fmtBytes(fw.sent)}) / ${fmtNum(fw.rcvd)} B (~${fmtBytes(fw.rcvd)}) (mostly ${fw.direction})`],
       ["Firewall actions", fw.actions.map(([a, n]) => `${a} (${n})`).join(", ")],
       ["App category", [...fw.appcats.map(([a, n]) => `${a} (${n})`), fw.appcatUnknown ? `unknown (${fw.appcatUnknown})` : ""].filter(Boolean).join(", ")],
-      ["Hostname / URL", fw.urls.join(", ")], ["User", fw.users.join(", ")],
-      ["Log source", f.logSource], ["MDE telemetry", f.edrTelemetry],
+      ["Web category", counted(m.webcats)], ["Countries", counted(m.countries)],
+      ["Hostname / URL", fw.urls.join(", ")], ["User", fw.users.join(", ")], ["Firewall device", counted(m.devices)],
     );
   } else {
     rows.push(
-      ["Activity window (logs)", winText(an)], ["Hosts", an.hosts.join(", ")], ["Users", an.users.join(", ")],
-      ["Source / internal IPs", an.ips.internal.join(", ")], ["External IPs", an.ips.external.join(", ")],
+      ["Hosts", counted(m.hosts)], ["Users", counted(m.users)], ["Email addresses", counted(m.emails)],
+      ["Source IPs", counted(m.srcIps)], ["Destination IPs", counted(m.dstIps)],
+      ["External IPs", counted(m.extIps)], ["Internal IPs", counted(m.intIps)],
       ["ASN", f.asn], ["Owner", f.owner], ["Location", f.location], ["IP type", f.ipType], ["Reputation", f.reputation],
+      ["Countries", counted(m.countries)], ["Destination ports", counted(m.ports)],
+      ["Logon types", counted(m.logonTypes)], ["Results / failure reasons", counted(m.results, 5)],
+      ["Processes", counted(m.processes)], ["Parent processes", an.parents.join(", ")],
+      ["Command lines", (m.cmds || []).slice(0, 3).map(([c, n]) => `${bt(short(c))}${n > 1 ? ` (${n})` : ""}`).join("; ")],
+      ["File paths", counted(m.paths, 5)],
       ["Domains", an.domains.join(", ")], ["URLs", an.urls.join(", ")],
-      ["File hashes", an.hashes.map((h) => `${h.type} ${h.value}`).join(", ")], ["Parent processes", an.parents.join(", ")],
-      ["Security control action", an.mitigated ? "Partly blocked / quarantined (see logs)" : ""],
-      ["Log source", f.logSource], ["MDE telemetry", f.edrTelemetry],
+      ["File hashes", an.hashes.map((h) => `${h.type} ${h.value}`).join(", ")],
+      ["Applications / services", counted(m.apps)], ["User agents", counted(m.agents, 3)],
+      ["Actions", counted(m.actions)], ["Security control action", an.mitigated ? "Partly blocked / quarantined (see logs)" : ""],
+      ["Log device", counted(m.devices)],
     );
   }
+  rows.push(["MDE telemetry", f.edrTelemetry]);
   return rows.filter(([, v]) => v && String(v).trim()).map(([k, v]) => `${k}: ${v}`);
 }
 

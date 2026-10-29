@@ -33,8 +33,8 @@ export function kv(line) {
     } catch {}
   }
   let body = t;
-  const cef = t.match(/CEF:\d+\|([^|]*)\|([^|]*)\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|(.*)$/);
-  if (cef) { o._vendor = `${cef[1]} ${cef[2]}`.trim(); body = cef[3]; }
+  const cef = t.match(/CEF:\d+\|([^|]*)\|([^|]*)\|[^|]*\|[^|]*\|([^|]*)\|([^|]*)\|(.*)$/);
+  if (cef) { o._vendor = `${cef[1]} ${cef[2]}`.trim(); o._cefname = cef[3]; o._cefsev = cef[4]; body = cef[5]; }
   const re = /([A-Za-z_][\w.]*)=("([^"]*)"|[^\s"]*)/g;
   let m;
   while ((m = re.exec(body))) o[m[1].toLowerCase()] = m[3] !== undefined ? m[3] : m[2];
@@ -123,6 +123,66 @@ const USER_K = ["user", "username", "suser", "duser", "targetusername", "account
 const PARENT_K = ["parent", "parentprocess", "parentprocessname", "parentimage", "initiatingprocessfilename", "parentbasefilename", "parent_process"];
 const DOMAIN_RE = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|ru|cn|info|biz|xyz|top|example|co|us|uk|de|ph|online|site|club|cc|tk|me|app|dev|cloud)\b/gi;
 
+// Alert-level fields and indicators as they appear in the pasted logs (Defender / Sentinel exports,
+// CEF, Fortigate, Windows events, JSON). Each value comes with how many log lines carry it.
+const META_K = {
+  alert: ["alertname", "alert_name", "alerttitle", "alertdisplayname", "displayname", "title", "threatname", "signature", "attack", "virus", "_cefname"],
+  alertId: ["alertid", "alert_id", "systemalertid", "incidentid", "incidentnumber", "providerincidentid"],
+  rule: ["analyticrulename", "analyticsrule", "rulename", "rule_name", "rule", "detectionrule"],
+  severity: ["alertseverity", "severity", "crlevel", "_cefsev"],
+  status: ["alertstatus", "incidentstatus"],
+  category: ["alertcategory", "category"],
+  detection: ["detectionsource", "servicesource", "providername", "productname"],
+  classification: ["classification", "determination"],
+  tactics: ["tactics", "tactic", "attacktactics"],
+  eventIds: ["eventid", "event_id", "eventcode", "#event_simplename", "actiontype", "eventtype"],
+  logonTypes: ["logontype", "logon_type"],
+  results: ["failurereason", "resultdescription", "resulttype", "result", "reason"],
+  processes: ["process", "processname", "filename", "image", "newprocessname", "imagefilename", "tgt.process.name"],
+  cmds: ["cmd", "commandline", "processcommandline", "command_line", "command"],
+  paths: ["folderpath", "filepath", "targetfilename", "path", "objectname"],
+  ports: ["dstport", "dpt", "destinationport", "dest_port", "destination_port", "remoteport"],
+  actions: ["action", "act", "deviceaction"],
+  countries: ["srccountry", "dstcountry", "country", "countryorregion", "location"],
+  devices: ["devname", "dvchost", "devicehostname", "observername"],
+  apps: ["app", "appname", "application", "service"],
+  webcats: ["catdesc", "urlcategory"],
+  agents: ["useragent", "user_agent", "http_user_agent"],
+};
+const SOURCE_LABEL = { crowdstrike: "CrowdStrike Falcon", s1: "SentinelOne", defender: "Microsoft Defender for Endpoint", qradar: "IBM QRadar", rapid7: "Rapid7 InsightIDR", splunk: "Splunk", sentinel: "Microsoft Sentinel" };
+const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
+const EMPTY_VAL = ["-", "n/a", "none", "null", "unknown"];
+
+/** [[value, lines]] for the keys, most frequent first. */
+function tally(rows, keys, clean = (v) => v) {
+  const m = new Map();
+  rows.forEach(({ o }) => {
+    const v = pick(o, keys);
+    const c = v == null ? "" : String(clean(v)).trim();
+    if (c && !EMPTY_VAL.includes(c.toLowerCase())) m.set(c, (m.get(c) || 0) + 1);
+  });
+  return [...m.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function logDetails(rows, text, { hosts, users, ext, internal }) {
+  const t = {};
+  Object.entries(META_K).forEach(([k, keys]) => (t[k] = tally(rows, keys, k === "processes" ? base : undefined)));
+  const lineCount = (v) => rows.filter((r) => r.raw.includes(v)).length;
+  const withLines = (vals) => vals.map((v) => [v, lineCount(v)]).sort((a, b) => b[1] - a[1]);
+  const ipsOf = (keys) => tally(rows, keys).filter(([v]) => isIp(v));
+  return {
+    ...t,
+    mitre: uniq(text.match(/\bT\d{4}(?:\.\d{3})?\b/g) || []),
+    hosts: withLines(hosts), users: withLines(users),
+    srcIps: ipsOf(["srcip", "src", "sourceip", "src_ip", "ipaddress", "callerip", "clientip", "remoteaddressip4", "source_address"]),
+    dstIps: ipsOf(["dstip", "dst", "destinationip", "dst_ip", "dest_ip", "remoteip", "remoteaddress", "destination_address"]),
+    extIps: withLines(ext), intIps: withLines(internal),
+    emails: withLines(uniq((text.match(EMAIL_RE) || []).map((e) => e.toLowerCase())).filter((e) => !users.some((u) => u.toLowerCase() === e))),
+    source: SOURCE_LABEL[detectSource(text)] || null,
+    vendor: uniq(rows.map(({ o }) => o._vendor || (o.devname || o.devid ? "Fortinet FortiGate" : null)))[0] || null,
+  };
+}
+
 export function analyze(form) {
   const text = form.rawLogs || "";
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -149,6 +209,7 @@ export function analyze(form) {
   const internal = allIps.filter(isPrivateIp);
   const mitigated = rows.some((r) => r.blocked);
   const findings = form.findings || "";
+  const logMeta = logDetails(rows, text, { hosts, users, ext, internal });
 
   let raw = techniques.reduce((a, t) => a + t.w + 4 * Math.min(t.hits - 1, 5), 0) + (ext.length ? 5 : 0);
   let score = 100 * (1 - Math.exp(-raw / 80));
@@ -227,7 +288,7 @@ export function analyze(form) {
     lines, events: lines.length, timeline, window, spanMs: window ? window.end - window.start : null,
     ips: { external: ext, internal }, ipCount, domains, urls, hashes, hosts, users, parents,
     techniques, mitigated, score, severity, verdict, analystSet, isFP, confidence, closure, reason, fw, primaryIp,
-    title, summary, actions: uniq(actions), iocs, warnings,
+    title, summary, actions: uniq(actions), iocs, warnings, logMeta,
     extIocs: iocs.filter((i) => !(i.type === "IP" && i.note === "Internal")),
   };
 }

@@ -297,3 +297,108 @@ select.input { cursor: pointer; }
 .dlg-title { font-family: var(--f-head); text-transform: uppercase; letter-spacing: .08em; font-size: 15px; }
 .dlg-desc { color: var(--muted); font-size: 13px; }
 .dlg-foot { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Screenshotbase results in the OSINT tab */
+.shot-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.shot-list li { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.shot-list .shot { max-height: 220px; object-fit: cover; object-position: top; width: 100%; }
+
+/* Shared "Defang indicators" checkbox in copy bars */
+.defang-toggle { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; color: var(--muted, inherit); user-select: none; margin-right: auto; }
+.defang-toggle input { accent-color: var(--accent, currentColor); margin: 0; }
+
+/* OSINT Results: include/exclude chips */
+.result-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.result-chips .chip { cursor: pointer; border: 1px solid var(--line); background: var(--sunk); }
+.result-chips .chip-off { opacity: .5; text-decoration: line-through; }
+
+/* OSINT provider rows (server lookups) */
+.prov-row { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.prov-row .pill { border-color: var(--line); }
+.prov-status { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.prov-status .pill, .prov-row .pill { border-left-width: 3px; background: var(--sunk); }
+
+/* ---------- Boot + offline banner ---------- */
+.boot { min-height: 100vh; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-family: var(--f-head); letter-spacing: .08em; text-transform: uppercase; font-size: 13px; }
+.offline { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 16px; background: var(--crit-bg); color: var(--crit); border-bottom: 1px solid var(--crit); font-size: 13px; font-weight: 500; }
+
+/* ---------- Login ---------- */
+.login-wrap {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px 16px;
+  background:
+    radial-gradient(900px 520px at 50% -10%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(600px 400px at 100% 110%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%),
+    linear-gradient(color-mix(in srgb, var(--line) 45%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(90deg, color-mix(in srgb, var(--line) 45%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
+    var(--bg);
+}
+.login-main { width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: center; gap: 18px; animation: login-in .35s ease-out; }
+@keyframes login-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.login-card {
+  width: 100%; display: flex; flex-direction: column; gap: 16px; padding: 32px 28px 24px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 6%, transparent) inset, 0 24px 60px -20px rgb(0 0 0 / .45), 0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
+  backdrop-filter: blur(6px);
+}
+.login-brand { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; margin-bottom: 6px; }
+.login-mark {
+  width: 56px; height: 56px; display: grid; place-items: center; border-radius: 14px; margin-bottom: 6px;
+  background: var(--accent-bg); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 8px 24px -8px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.login-mark .logo { width: 30px; height: 30px; }
+.login-title { font-family: var(--f-head); font-weight: 700; font-size: 24px; letter-spacing: .1em; text-transform: uppercase; margin: 0; line-height: 1.1; }
+.login-sub { margin: 0; color: var(--muted); font-size: 13px; }
+.login-credit { margin: 2px 0 0; color: var(--muted); font-size: 11.5px; letter-spacing: .04em; }
+.credit { font-weight: 600; }
+.login-field { display: flex; flex-direction: column; gap: 6px; }
+.login-input {
+  display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px;
+  background: var(--sunk); border: 1px solid var(--line); border-radius: 9px; color: var(--muted);
+  transition: border-color .15s, box-shadow .15s, background-color .15s;
+}
+.login-input:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.login-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); color: var(--accent); }
+.login-input input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: transparent; color: var(--ink); font-family: var(--f-body); font-size: 14px; }
+.login-input input::placeholder { color: var(--muted); opacity: .7; }
+.login-input input:focus-visible { outline: none; }
+.login-eye { display: grid; place-items: center; width: 30px; height: 30px; margin-right: -6px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.login-eye:hover { color: var(--ink); background: var(--neutral-bg); }
+.login-hint { font-size: 12px; color: var(--med); }
+.login-alert { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 9px; background: var(--crit-bg); color: var(--crit); border: 1px solid color-mix(in srgb, var(--crit) 35%, transparent); font-size: 13px; line-height: 1.4; }
+.login-alert svg { flex: none; margin-top: 1px; }
+.login-submit {
+  height: 44px; margin-top: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 0; border-radius: 9px; cursor: pointer; font-family: var(--f-head); font-size: 14px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--on-accent); background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, #fff), var(--accent));
+  box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--accent) 70%, transparent);
+  transition: filter .15s, transform .15s, box-shadow .15s;
+}
+.login-submit:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 12px 24px -10px color-mix(in srgb, var(--accent) 80%, transparent); }
+.login-submit:active:not(:disabled) { transform: none; }
+.login-submit:disabled { opacity: .65; cursor: progress; }
+.login-help { margin: 0; text-align: center; color: var(--muted); font-size: 12.5px; }
+.login-foot { margin: 0; text-align: center; color: var(--muted); font-size: 11.5px; letter-spacing: .02em; opacity: .85; }
+@media (max-width: 440px) { .login-card { padding: 26px 18px 20px; border-radius: 12px; } .login-title { font-size: 21px; } }
+
+
+/* AI screenshot reader */
+.dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 26px 14px; border: 1.5px dashed var(--line); border-radius: 10px; background: var(--sunk); color: var(--muted); cursor: pointer; transition: border-color .15s, background-color .15s, color .15s; }
+.dropzone b { color: var(--ink); font-weight: 600; }
+.dropzone:hover, .dropzone.on { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.shot-prev { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--sunk); }
+.shot-prev img { display: block; width: 100%; max-height: 320px; object-fit: contain; }
+.shot-prev .x { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+
+
+/* AI tab: ticket / paste switch and paste form */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--sunk); }
+.seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--muted); padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.seg button:disabled { opacity: .5; cursor: not-allowed; }
+.paste-form { display: flex; flex-direction: column; gap: 10px; }
+.paste-form .ta-logs { min-height: 220px; font-family: var(--f-mono); font-size: 12.5px; resize: vertical; }
+.paste-form .ta-notes { min-height: 90px; resize: vertical; }
+.paste-meta { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }

@@ -1,0 +1,201 @@
+// SOC Triage Desk database.
+// SQLite for local testing. To move to PostgreSQL: change provider to "postgresql",
+// point DATABASE_URL at the server, and run `npx prisma migrate dev` once to create a
+// fresh migration history for Postgres. Enum-like fields are plain strings validated with zod,
+// so nothing here is SQLite-specific.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique
+  displayName  String
+  passwordHash String
+  role         String    @default("analyst") // admin | analyst
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  lastLoginAt  DateTime?
+
+  assessments Assessment[]
+  notes       Note[]
+  auditLogs   AuditLog[]
+  screenshots Screenshot[]
+}
+
+/// express-session store (see src/auth/session-store.ts)
+model Session {
+  sid       String   @id
+  data      String
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+/// Failed logins, for the 5-per-15-minutes lockout
+model LoginFailure {
+  id       Int      @id @default(autoincrement())
+  username String
+  at       DateTime @default(now())
+
+  @@index([username, at])
+}
+
+model Assessment {
+  id               Int       @id @default(autoincrement())
+  ticket           String
+  client           String
+  alertName        String    @default("")
+  rawLogs          String    @default("")
+  findings         String    @default("")
+  analystId        Int?
+  analyst          User?     @relation(fields: [analystId], references: [id], onDelete: SetNull)
+  analystName      String    @default("")
+  shift            String    @default("Morning")
+  verdict          String    @default("Auto")
+  severity         String    @default("Low")
+  riskScore        Int       @default(0)
+  confidence       String    @default("Low")
+  summary          String    @default("")
+  // enrichment
+  alertId          String    @default("")
+  rule             String    @default("")
+  ruleLogic        String    @default("")
+  detSource        String    @default("")
+  category         String    @default("")
+  alertSeverity    String    @default("")
+  status           String    @default("")
+  created          String    @default("")
+  alertWindow      String    @default("")
+  asn              String    @default("")
+  location         String    @default("")
+  ipType           String    @default("")
+  reputation       String    @default("")
+  logSource        String    @default("")
+  edrTelemetry     String    @default("")
+  closure          String    @default("Auto")
+  verdictReason    String    @default("")
+  /// Other form fields the frontend keeps (owner, mitre, serviceSource, classification, …)
+  extra            Json?
+  generatedReport  String?
+  aiGenerated      Boolean   @default(false)
+  escalatedAt      DateTime?
+  escalationStatus String?
+  statusLog        Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  notes     Note[]
+  osint     OsintResult[]
+  checklist ChecklistState[]
+
+  @@unique([client, ticket])
+  @@index([escalatedAt])
+  @@index([createdAt])
+}
+
+model Note {
+  id           Int        @id @default(autoincrement())
+  assessmentId Int
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  type         String // Investigation | Assessment | Client comms | Containment | Handover
+  text         String
+  at           DateTime   @default(now())
+  authorId     Int?
+  author       User?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorName   String     @default("")
+  /// Written by the app (e.g. escalation), removed again when escalation is undone
+  auto         Boolean    @default(false)
+
+  @@index([assessmentId])
+}
+
+/// OSINT verdicts. scope = "ws:<userId>" for an analyst's standalone OSINT workspace,
+/// or "as:<assessmentId>" when a result is attached to an assessment.
+model OsintResult {
+  id           Int         @id @default(autoincrement())
+  scope        String
+  userId       Int?
+  assessmentId Int?
+  assessment   Assessment? @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  indicator    String
+  type         String // ip | domain | url | hash
+  verdict      String      @default("Not checked")
+  analystNote  String      @default("")
+  manual       Boolean     @default(false)
+  hidden       Boolean     @default(false)
+  providerData Json?
+  checkedAt    DateTime?
+  checkedBy    Int?
+  createdAt    DateTime    @default(now())
+
+  @@unique([scope, indicator])
+  @@index([assessmentId])
+}
+
+model OsintCache {
+  id        Int      @id @default(autoincrement())
+  indicator String
+  provider  String
+  response  Json
+  fetchedAt DateTime @default(now())
+
+  @@unique([provider, indicator])
+}
+
+model Screenshot {
+  id      Int      @id @default(autoincrement())
+  userId  Int
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  page    String
+  url     String
+  takenAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([takenAt])
+}
+
+model Playbook {
+  id          Int      @id @default(autoincrement())
+  client      String   @unique
+  industry    String   @default("")
+  reviewed    String   @default("")
+  matrix      Json // [{ sev, contact, email, channel, sla }]
+  contacts    Json // [{ name, role, email, phone }]
+  containment String   @default("")
+  benign      Json // [string]
+  procedures  Json // [{ title, steps: [string] }]
+  updatedAt   DateTime @updatedAt
+}
+
+model ChecklistState {
+  id           Int        @id @default(autoincrement())
+  assessmentId Int
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  item         String
+  done         Boolean    @default(false)
+  doneBy       Int?
+  doneAt       DateTime?
+
+  @@unique([assessmentId, item])
+}
+
+model AuditLog {
+  id      Int      @id @default(autoincrement())
+  userId  Int?
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action  String
+  target  String   @default("")
+  /// Never secrets or raw logs
+  details Json?
+  ip      String   @default("")
+  at      DateTime @default(now())
+
+  @@index([at])
+}

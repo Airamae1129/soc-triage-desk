@@ -1,73 +1,95 @@
-import { buildReport } from "./drafts";
-import { maskText, fmtDT } from "./util";
+// Client for the SOC Triage Playbook API (same origin, session cookie).
+// Every state-changing request carries X-Requested-With, which the server requires (CSRF guard).
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const API = "/api";
 
-export async function getConfig() {
-  const r = await fetch(`${API}/config`);
-  if (!r.ok) throw new Error("config");
-  return r.json();
-}
-
-export async function streamAi(body, onDelta, signal) {
-  const r = await fetch(`${API}/ai/stream`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
-  if (!r.ok || !r.body) throw new Error((await r.json().catch(() => ({}))).detail || `AI request failed (HTTP ${r.status})`);
-  const reader = r.body.getReader();
-  const dec = new TextDecoder();
-  let buf = "", full = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const parts = buf.split("\n\n");
-    buf = parts.pop();
-    for (const p of parts) {
-      const line = p.replace(/^data:\s*/, "");
-      if (!line) continue;
-      const ev = JSON.parse(line);
-      if (ev.error) throw new Error(ev.error);
-      if (ev.t) { full += ev.t; onDelta(full); }
-    }
+export class ApiError extends Error {
+  constructor(status, code, message, details) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.details = details;
   }
-  return full;
 }
 
-export const cleanAi = (s) => s.replace(/\*\*(.+?)\*\*/g, "$1").replace(/^#{1,6}\s+/gm, "");
+// Listeners for "the server is unreachable" and "your session ended" (App shows a banner / login).
+const listeners = { offline: new Set(), unauthorized: new Set() };
+export const onApiEvent = (kind, fn) => { listeners[kind].add(fn); return () => listeners[kind].delete(fn); };
+const emit = (kind, v) => listeners[kind].forEach((f) => f(v));
 
-export async function osintLookup(type, value, force = false) {
-  const r = await fetch(`${API}/osint/lookup`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type, value, force }) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.detail || `Lookup failed (HTTP ${r.status})`);
-  return j;
+export async function api(path, { method = "GET", body, signal } = {}) {
+  let res;
+  try {
+    res = await fetch(`${API}${path}`, {
+      method,
+      credentials: "same-origin",
+      signal,
+      headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest", ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    if (e?.name === "AbortError") throw e;
+    emit("offline", true);
+    throw new ApiError(0, "offline", "Can't reach the SOC Triage Playbook server. Check that it is running and your network connection.");
+  }
+  emit("offline", false);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = json?.error || {};
+    if (res.status === 401 && !path.startsWith("/auth/")) emit("unauthorized", true);
+    throw new ApiError(res.status, err.code || "error", err.message || `Request failed (HTTP ${res.status})`, err.details);
+  }
+  return json;
 }
 
-export async function screenshotUsage() {
-  const r = await fetch(`${API}/osint/screenshot/usage`);
-  return r.ok ? r.json() : { count: 0 };
-}
+const enc = encodeURIComponent;
 
-export async function takeScreenshot(url) {
-  const r = await fetch(`${API}/osint/screenshot`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url, confirmed: true }) });
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `Screenshot failed (HTTP ${r.status})`);
-  return URL.createObjectURL(await r.blob());
-}
+// ---- auth / users / audit ----
+export const login = (username, password) => api("/auth/login", { method: "POST", body: { username, password } });
+export const logout = () => api("/auth/logout", { method: "POST" });
+export const getMe = () => api("/auth/me");
+export const listUsers = () => api("/users");
+export const createUser = (u) => api("/users", { method: "POST", body: u });
+export const updateUser = (id, patch) => api(`/users/${id}`, { method: "PATCH", body: patch });
+export const getAudit = (limit = 200) => api(`/audit?limit=${limit}`);
 
-export function buildAiContext(entry, an, osintVals = {}, mask = false) {
-  const f = entry?.form || {};
-  const fields = Object.entries(f).filter(([k, v]) => v && typeof v === "string" && !["rawLogs", "findings"].includes(k)).map(([k, v]) => `${k}: ${v}`);
-  const osint = an.extIocs.map((i) => { const o = osintVals[i.value]; return `- ${i.type} ${i.value}: ${o?.verdict || "Not checked"}${o?.note ? ` – ${o.note}` : ""}`; });
-  const engine = [
-    `Rule engine: score ${an.score}/100, severity ${an.severity}, verdict ${an.verdict}${an.analystSet ? " (set by analyst)" : " (auto)"}, confidence ${an.confidence}, closure ${an.closure}`,
-    `Summary: ${an.summary}`,
-    `Techniques: ${an.techniques.map((t) => `${t.id} ${t.name} (${t.tactic}) x${t.hits}`).join("; ") || "none"}`,
-    `Window: ${an.window ? `${fmtDT(an.window.start)} – ${fmtDT(an.window.end)} (UTC+08:00)` : "n/a"}`,
-    `Hosts: ${an.hosts.join(", ") || "-"} | Users: ${an.users.join(", ") || "-"} | External IPs: ${an.ips.external.join(", ") || "-"} | Internal IPs: ${an.ips.internal.join(", ") || "-"}`,
-  ];
-  const text = [
-    "== TICKET FIELDS ==", ...fields, "", "== ANALYST FINDINGS ==", f.findings || "(none)", "",
-    "== ENGINE RESULT ==", ...engine, "", "== OSINT RESULTS ==", ...(osint.length ? osint : ["(none)"]), "",
-    "== RULE-BASED REPORT DRAFT ==", buildReport(an, f), "", "== RAW LOGS ==", (f.rawLogs || "").slice(0, 40000),
-  ].join("\n");
-  if (!mask) return { text, items: [] };
-  return maskText(text, { client: f.client, users: an.users, hosts: an.hosts, ips: an.ips.internal });
-}
+// ---- assessments ----
+export const listAssessments = (limit = 300) => api(`/assessments?limit=${limit}`);
+export const saveAssessment = (form, snapshot) => api("/assessments", { method: "POST", body: { form, snapshot } });
+export const updateAssessment = (id, form, snapshot) => api(`/assessments/${id}`, { method: "PUT", body: { form, ...(snapshot ? { snapshot } : {}) } });
+export const escalate = (id, noteText) => api(`/assessments/${id}/escalate`, { method: "POST", body: { noteText } });
+export const unescalate = (id) => api(`/assessments/${id}/escalate`, { method: "DELETE" });
+export const setStatus = (id, status) => api(`/assessments/${id}/status`, { method: "PATCH", body: { status } });
+export const getNotes = (id) => api(`/assessments/${id}/notes`);
+export const addNote = (id, note) => api(`/assessments/${id}/notes`, { method: "POST", body: note });
+export const deleteNote = (noteId) => api(`/notes/${noteId}`, { method: "DELETE" });
+export const getChecklist = (id) => api(`/assessments/${id}/checklist`);
+export const setChecklistItem = (id, item, done) => api(`/assessments/${id}/checklist`, { method: "PUT", body: { item, done } });
+export const getAssessmentOsint = (id) => api(`/assessments/${id}/osint`);
+export const attachOsint = (id, indicator, verdict, note) => api(`/assessments/${id}/osint/${enc(indicator)}`, { method: "PUT", body: { verdict, note } });
+
+// ---- playbooks ----
+export const listPlaybooks = () => api("/playbooks");
+export const savePlaybook = (client, pb) => api(`/playbooks/${enc(client)}`, { method: "PUT", body: pb });
+
+// ---- OSINT ----
+export const getProviders = () => api("/osint/providers");
+export const osintLookup = (indicator, { type, force, providers } = {}) => api("/osint/lookup", { method: "POST", body: { indicator, ...(type ? { type } : {}), ...(force ? { force } : {}), ...(providers ? { providers } : {}) } });
+export const getWorkspace = () => api("/osint/workspace");
+export const addToWorkspace = (indicators) => api("/osint/workspace", { method: "POST", body: { indicators } });
+export const patchWorkspace = (indicator, patch) => api(`/osint/workspace/${enc(indicator)}`, { method: "PATCH", body: patch });
+export const removeFromWorkspace = (indicator) => api(`/osint/workspace/${enc(indicator)}`, { method: "DELETE" });
+export const clearWorkspace = () => api("/osint/workspace", { method: "DELETE" });
+export const takeScreenshot = (url) => api("/osint/screenshot", { method: "POST", body: { url, confirmed: true } });
+export const deleteScreenshot = (id) => api(`/osint/screenshot/${id}`, { method: "DELETE" });
+export const urlscanScan = (url) => api("/osint/urlscan/scan", { method: "POST", body: { url, confirmed: true } });
+
+// ---- AI ----
+export const aiStatus = () => api("/ai/status");
+export const aiDraftReport = (assessmentId, signal) => api("/ai/draft-report", { method: "POST", body: { assessmentId }, signal });
+export const aiExplainLine = (line, assessmentId, signal) => api("/ai/explain-line", { method: "POST", body: { line, ...(assessmentId ? { assessmentId } : {}) }, signal });
+export const aiReadScreenshot = (image, note, assessmentId, signal) => api("/ai/read-screenshot", { method: "POST", body: { image, ...(note ? { note } : {}), ...(assessmentId ? { assessmentId } : {}) }, signal });
+export const aiChat = (assessmentId, messages, signal, pasted) => api("/ai/chat", { method: "POST", body: { ...(assessmentId ? { assessmentId } : {}), ...(pasted ? { pasted } : {}), messages }, signal });
+export const aiDraftPasted = (pasted, signal) => api("/ai/draft-report", { method: "POST", body: { pasted }, signal });
+
+export const cleanAi = (s) => String(s || "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/^#{1,6}\s+/gm, "");

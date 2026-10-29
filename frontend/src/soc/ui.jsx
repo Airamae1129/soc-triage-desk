@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Copy, Check, ChevronDown } from "lucide-react";
-import { copyText, sevKey, fmtHM, parseSla } from "./util";
+import { copyText, sevKey, fmtHM, parseSla, defangText, getDefang, setDefang, subscribeDefang } from "./util";
 
 export function Panel({ title, right, children, testid, className = "", bodyClass = "" }) {
   return (
@@ -23,12 +23,27 @@ export const VerdictPill = ({ verdict, testid }) => <span className={`pill sev-$
 export const Pill = ({ children, tone = "neutral", testid }) => <span className={`pill sev-${tone}`} data-testid={testid}>{children}</span>;
 export const Chip = ({ children, ext, testid }) => <span className={`chip mono ${ext ? "chip-ext" : ""}`} data-testid={testid}>{children}</span>;
 
-export function CopyBtn({ text, targetRef, testid, label = "Copy", small }) {
+/** Shared "Defang indicators" setting: one switch for every copy box in the app. */
+export const useDefang = () => useSyncExternalStore(subscribeDefang, getDefang);
+
+export function DefangToggle({ testid = "defang-toggle" }) {
+  const on = useDefang();
+  return (
+    <label className="defang-toggle small" title="Copy IPs, domains, URLs and emails defanged: 1.2.3[.]4, example[.]com, hxxps://, user[@]example[.]com" data-testid={testid}>
+      <input type="checkbox" checked={on} onChange={(e) => setDefang(e.target.checked)} /> Defang indicators
+    </label>
+  );
+}
+
+/** raw: never defang (queries, image links). */
+export function CopyBtn({ text, targetRef, testid, label = "Copy", small, raw }) {
   const [done, setDone] = useState(false);
   const t = useRef();
+  const defang = useDefang() && !raw;
   useEffect(() => () => clearTimeout(t.current), []);
   const go = async () => {
-    await copyText(typeof text === "function" ? text() : text, targetRef?.current);
+    const s = typeof text === "function" ? text() : text;
+    await copyText(defang ? defangText(s) : s, targetRef?.current);
     setDone(true);
     clearTimeout(t.current);
     t.current = setTimeout(() => setDone(false), 2000);
@@ -40,15 +55,20 @@ export function CopyBtn({ text, targetRef, testid, label = "Copy", small }) {
   );
 }
 
-export function CopyBlock({ text, testid, extra, maxH }) {
+/** Shows exactly what will be copied: defanged when the shared setting is on (unless raw). */
+/** extra: left of the bar; actions: right, next to Copy. */
+export function CopyBlock({ text, testid, extra, actions, maxH, raw }) {
   const ref = useRef();
+  const defang = useDefang() && !raw;
   return (
     <div className="copyblock">
       <div className="copyblock-bar">
         {extra}
-        <CopyBtn text={text} targetRef={ref} testid={`${testid}-copy`} />
+        {!raw && <DefangToggle testid={`${testid}-defang`} />}
+        {actions}
+        <CopyBtn text={text} targetRef={ref} testid={`${testid}-copy`} raw={raw} />
       </div>
-      <pre ref={ref} className="mono pre" style={maxH ? { maxHeight: maxH } : undefined} data-testid={testid}>{text}</pre>
+      <pre ref={ref} className="mono pre" style={maxH ? { maxHeight: maxH } : undefined} data-testid={testid}>{defang ? defangText(text) : text}</pre>
     </div>
   );
 }

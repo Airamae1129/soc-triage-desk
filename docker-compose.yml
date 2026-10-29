@@ -1,0 +1,39 @@
+services:
+  app:
+    build: .
+    image: soc-triage-desk:latest
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file: .env
+    environment:
+      # Inside the container the database is always on the volume, whatever .env says.
+      DATABASE_URL: "file:/data/soc.db"
+      PORT: "3000"
+      NODE_ENV: production
+      # With the "local-ai" profile the app talks to the ollama service below. Set OLLAMA_URL in
+      # .env instead if Ollama runs on another machine.
+      OLLAMA_URL: "${OLLAMA_URL_DOCKER:-http://ollama:11434}"
+    volumes:
+      - socdesk-data:/data
+
+  # Optional local AI (free, nothing leaves the server). Start it with:
+  #   docker compose --profile local-ai up -d
+  #   docker compose exec ollama ollama pull qwen3.5:4b
+  # Not published on a host port: only the app container can reach it.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["local-ai"]
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    # On a server with an NVIDIA GPU (and the NVIDIA container toolkit), uncomment for much
+    # faster answers:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+volumes:
+  socdesk-data:
+  ollama-models:

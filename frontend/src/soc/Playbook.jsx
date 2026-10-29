@@ -65,7 +65,8 @@ function Tuning({ app }) {
 }
 
 export default function Playbook({ app }) {
-  const { playbooks, setPlaybooks, entry, an } = app;
+  const { playbooks, savePlaybook, entry, an, isAdmin } = app;
+  const [saveErr, setSaveErr] = useState("");
   const names = Object.keys(playbooks);
   const ticketClient = names.find((n) => n.toLowerCase() === (entry?.form.client || "").toLowerCase());
   const [sel, setSel] = useState(ticketClient || names[0] || "");
@@ -79,8 +80,8 @@ export default function Playbook({ app }) {
     e.preventDefault();
     const n = newName.trim();
     if (!n || playbooks[n]) return;
-    setPlaybooks({ ...playbooks, [n]: blank(n) });
-    setSel(n); setNewName(""); setAdding(false); setEdit(true);
+    setSaveErr("");
+    savePlaybook(n, blank(n)).then(() => { setSel(n); setNewName(""); setAdding(false); setEdit(true); }).catch((e) => setSaveErr(e.message));
   };
   return (
     <div className="stack" data-testid="playbook-tab">
@@ -88,8 +89,10 @@ export default function Playbook({ app }) {
         <label className="field inline"><span className="field-l">Client</span>
           <select className="input" value={sel} onChange={(e) => { setSel(e.target.value); setEdit(false); }} data-testid="pb-client-select">{names.map((n) => <option key={n}>{n}</option>)}</select>
         </label>
-        <button className="btn" onClick={() => setEdit(!edit)} disabled={!pb} data-testid="pb-edit-btn">{edit ? "Close editor" : "Edit playbook"}</button>
-        <button className="btn" onClick={() => setAdding(!adding)} data-testid="pb-new-client-btn">New client</button>
+        {isAdmin && <button className="btn" onClick={() => setEdit(!edit)} disabled={!pb} data-testid="pb-edit-btn">{edit ? "Close editor" : "Edit playbook"}</button>}
+        {isAdmin && <button className="btn" onClick={() => setAdding(!adding)} data-testid="pb-new-client-btn">New client</button>}
+        {!isAdmin && <span className="muted small">Only admins can edit playbooks.</span>}
+        {saveErr && <span className="err small">{saveErr}</span>}
         {adding && (
           <form className="inline-form" onSubmit={create}>
             <input className="input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Client name" autoFocus data-testid="pb-new-client-input" />
@@ -98,8 +101,8 @@ export default function Playbook({ app }) {
         )}
         {!isTicket && entry && <span className="muted small">Current ticket client: {entry.form.client || "—"}{!ticketClient && " (no playbook)"}</span>}
       </div>
-      {!pb && <Panel title="Playbook"><p className="muted">No playbooks yet. Create one with New client.</p></Panel>}
-      {pb && edit && <Editor key={sel} pb={pb} onCancel={() => setEdit(false)} onSave={(np) => { setPlaybooks({ ...playbooks, [sel]: np }); setEdit(false); }} />}
+      {!pb && <Panel title="Playbook"><p className="muted">No playbooks yet.{isAdmin ? " Create one with New client." : " Ask an admin to add one."}</p></Panel>}
+      {pb && edit && <Editor key={sel} pb={pb} onCancel={() => setEdit(false)} onSave={(np) => { setSaveErr(""); savePlaybook(sel, np).then(() => setEdit(false)).catch((e) => setSaveErr(e.message)); }} />}
       {pb && !edit && (
         <div className="grid2">
           <div className="col">

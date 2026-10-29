@@ -49,3 +49,14 @@ User choices: the theme follows the system setting and also has a manual toggle.
 - P2:
   - Per-client report templates
   - Auto-tick checklist items when an OSINT verdict is set
+
+## Iteration 3 (Oct 2026, local)
+- Tab order: Assessment, Investigation, AI Assistant, OSINT, SOC Notes, Playbook, Notables, Dashboard (shortcuts 1–8 follow it).
+- OSINT keys (AbuseIPDB, VirusTotal, urlscan.io, Screenshotbase) live in `backend/.env`, which is git-ignored; `backend/.env.example` is the template.
+- Backend runs without MongoDB: the OSINT cache and screenshot counter fall back to memory. AI stays off locally (no `emergentintegrations`).
+- Screenshotbase panel in OSINT: the analyst types a URL, confirms in a dialog, and gets a hosted PNG link (`response_type=json`) with a Copy image URL button. Nothing runs without confirmation.
+- "Results for the ticket" copy format: IP(s) Reputation (AbuseIPDB, VirusTotal), URL/Domain Reputation (VirusTotal, URLscan.io, plus a Screenshotbase line only when a screenshot was generated for that URL/domain), File Hash Reputation (VirusTotal). Screenshots of URLs that are not ticket indicators are listed at the end. IP lookups no longer call urlscan.io.
+- Local ports: frontend 3011, backend 8011.
+- Defang indicators: one shared checkbox on every copy box (Assessment, Investigation, AI Assistant, OSINT, SOC Notes, Notables), remembered in `socdesk.defang`. It changes the preview and the copied text: `1[.]2[.]3[.]4`, `example[.]com`, `hxxps://`, `user[@]example[.]com`. Never applied to SIEM queries, screenshot image links, file names or OSINT source names. The Ctrl+Shift+C report shortcut follows it too.
+- OSINT is a standalone checker: indicators come only from what the analyst adds (several at once, separated by spaces or commas), stored under `socdesk.osint._workspace`, not per ticket. The ticket context strip is hidden on the OSINT tab.
+- OSINT Results: chips with × to leave an indicator out of the copy text (+ adds it back), and a Clear button (asks first) that removes all indicators, results and screenshot links.

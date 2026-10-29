@@ -1,19 +1,19 @@
-import { useRef, useState } from "react";
-import { Download, Upload } from "lucide-react";
-import { Panel, CopyBtn, SevPill, VerdictPill, SlaTimer } from "./ui";
+import { useState } from "react";
+import { Download } from "lucide-react";
+import { Panel, CopyBtn, DefangToggle, SevPill, VerdictPill, SlaTimer } from "./ui";
 import { fmtDTm, manilaInput, fromManilaInput, fmtHM, download, fmtDT } from "./util";
 import { osintSummary, verdictLine } from "./drafts";
+import { wsForSummary } from "./Osint";
 
 const TYPES = ["Investigation", "Assessment", "Client comms", "Containment", "Handover"];
 const typeTone = { Investigation: "accent", Assessment: "medium", "Client comms": "high", Containment: "critical", Handover: "low" };
 
 export default function Notes({ app }) {
-  const { ticketNotes, addNote, delNote, an, entry, pbRow, osintT } = app;
+  const { ticketNotes, addNote, delNote, an, entry, pbRow, ws, user, isAdmin } = app;
   const [type, setType] = useState("Investigation");
   const [time, setTime] = useState(manilaInput(new Date()));
   const [text, setText] = useState("");
   const [msg, setMsg] = useState("");
-  const fileRef = useRef();
   const f = entry?.form || {};
   const sorted = [...ticketNotes].sort((a, b) => new Date(a.time) - new Date(b.time));
   const allText = [`SOC NOTES – ${f.ticketId || "—"} · ${f.client || "—"}`, `Alert: ${an.title}`, "",
@@ -24,12 +24,8 @@ export default function Notes({ app }) {
     addNote({ type, time: fromManilaInput(time).toISOString(), text: text.trim() });
     setText(""); setMsg(""); setTime(manilaInput(new Date()));
   };
-  const restore = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    file.text().then((t) => { try { app.importAll(JSON.parse(t)); setMsg("Data restored from backup."); } catch { setMsg("That file is not a valid backup."); } });
-    e.target.value = "";
-  };
+  // OSINT results come from the analyst's OSINT tab (left-out indicators excluded).
+  const { iocs: osintIocs, values: osintVals } = wsForSummary(ws.items);
   return (
     <div className="grid2" data-testid="notes-tab">
       <div className="col">
@@ -47,7 +43,7 @@ export default function Notes({ app }) {
             <div className="btn-row field-wide">
               <button className="btn btn-primary" data-testid="add-note-btn">Add note</button>
               <button type="button" className="btn" onClick={() => { setType("Assessment"); setText(`${an.summary}\n${verdictLine(an)}`); }} data-testid="insert-assessment-btn">Insert assessment summary</button>
-              <button type="button" className="btn" onClick={() => { setType("Investigation"); setText(osintSummary(f, an.extIocs, osintT.values)); }} data-testid="insert-osint-btn">Insert OSINT results</button>
+              <button type="button" className="btn" onClick={() => { setType("Investigation"); setText(osintSummary(f, osintIocs, osintVals, ws.shots)); }} data-testid="insert-osint-btn">Insert OSINT results</button>
             </div>
             {msg && <p className="muted small field-wide" data-testid="notes-msg">{msg}</p>}
           </form>
@@ -61,7 +57,7 @@ export default function Notes({ app }) {
                   <span className="mono small">{fmtDTm(n.time)}</span>
                   <span className={`typelabel t-${typeTone[n.type]}`}>{n.type}</span>
                   {n.author && <span className="muted small">{n.author}</span>}
-                  <button className="x" onClick={() => delNote(n.id)} aria-label="Delete note" data-testid={`delete-note-${n.id}`}>×</button>
+                  {(isAdmin || n.authorId === user?.id) && <button className="x" onClick={() => delNote(n.id)} aria-label="Delete note" data-testid={`delete-note-${n.id}`}>×</button>}
                 </div>
                 <p className="caselog-t">{n.text}</p>
               </li>
@@ -81,14 +77,14 @@ export default function Notes({ app }) {
         </Panel>
         <Panel title="Export" testid="export-panel">
           <div className="btn-row">
+            <DefangToggle testid="notes-defang" />
             <CopyBtn text={allText} label="Copy all notes" testid="copy-all-notes-btn" />
             <button className="btn btn-sm" onClick={() => download(`${f.ticketId || "ticket"}-notes.txt`, allText)} data-testid="download-notes-btn"><Download size={13} /> Notes .txt</button>
           </div>
-          <h4 className="sub-h">All data (this browser)</h4>
+          <h4 className="sub-h">Export loaded data</h4>
           <div className="btn-row">
-            <button className="btn btn-sm" onClick={() => download(`soc-triage-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(app.exportAll(), null, 2), "application/json")} data-testid="backup-json-btn"><Download size={13} /> Backup .json</button>
-            <button className="btn btn-sm" onClick={() => fileRef.current.click()} data-testid="restore-json-btn"><Upload size={13} /> Restore .json</button>
-            <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={restore} data-testid="restore-json-input" />
+            <button className="btn btn-sm" onClick={() => download(`soc-triage-export-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(app.exportAll(), null, 2), "application/json")} data-testid="backup-json-btn"><Download size={13} /> Export .json</button>
+            <span className="muted small">Data lives on the server; this is a copy for reports.</span>
           </div>
         </Panel>
       </div>

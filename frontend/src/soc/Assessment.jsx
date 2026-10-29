@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { ExternalLink, ChevronRight, AlertTriangle, Download, Sparkles } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { ExternalLink, ChevronRight, AlertTriangle, Download, Sparkles, Search, Loader2, Square } from "lucide-react";
 import { Panel, SevPill, VerdictPill, Pill, Chip, CopyBlock, Field, SlaTimer, escalatedLabel } from "./ui";
 import { fmtDTm, fmtSpan, fmtBytes, fmtNum, sevKey, maskText, download, fmtHM } from "./util";
 import { buildReport, buildEmail, buildHandover, reportChecks } from "./drafts";
@@ -46,6 +46,10 @@ function Intake({ app }) {
               <select id="f-closure" className="input" value={form.closure} onChange={set("closure")} data-testid="intake-closure-select">{CLOSURES.map((v) => <option key={v}>{v}</option>)}</select>
             </Field>
             <Field label="Verdict reason (optional)" wide htmlFor="f-verdictReason">{inp("verdictReason", "One sentence")}</Field>
+            <div className="btn-row field-wide">
+              <button type="button" className="btn btn-sm" onClick={app.fillFromOsint} data-testid="fill-from-osint-btn"><Search size={13} /> Fill from OSINT</button>
+              <span className="muted small">Fills ASN, Owner, Location, IP type and Reputation for the main external IP in the logs.</span>
+            </div>
             {DETAILS.map(([k, l, w]) => <Field key={k} label={l} wide={w} htmlFor={`f-${k}`}>{inp(k)}</Field>)}
           </div>
         </details>
@@ -68,7 +72,7 @@ function Recent({ app }) {
   const { history, loadEntry, entry } = app;
   const list = [...history].sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
   return (
-    <Panel title="Recent assessments" right={<span className="muted small">This browser only</span>} testid="recent-panel">
+    <Panel title="Recent assessments" right={<span className="muted small">Shared with the team</span>} testid="recent-panel">
       {!list.length && <p className="muted">No saved assessments yet.</p>}
       <ul className="recent">
         {list.map((h) => (
@@ -134,15 +138,29 @@ function Drafts({ app }) {
   const { an, entry, toggleEscalated } = app;
   const [tab, setTab] = useState("report");
   const [mask, setMask] = useState(false);
+  const [useAiDraft, setUseAiDraft] = useState(true);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState(null);
+  const ctl = useRef();
   const f = entry.form;
+  const aiOn = !!app.aiConfig?.ai;
   const texts = useMemo(() => ({
-    report: buildReport(an, f),
-    email: buildEmail(an, f, { pbRow: app.pbRow, osint: app.osintT.values, analyst: f.analyst }),
-    handover: buildHandover(an, f, { entry, checklist: app.checklistInfo, osint: app.osintT.values, notes: app.ticketNotes, pbRow: app.pbRow }),
-  }), [an, f, app.pbRow, app.osintT, entry, app.checklistInfo, app.ticketNotes]);
+    report: aiOn && useAiDraft && entry.aiDraft ? entry.aiDraft : buildReport(an, f),
+    email: buildEmail(an, f, { pbRow: app.pbRow, osint: app.osintValues, analyst: f.analyst }),
+    handover: buildHandover(an, f, { entry, checklist: app.checklistInfo, osint: app.osintValues, notes: app.ticketNotes, pbRow: app.pbRow }),
+  }), [an, f, app.pbRow, app.osintValues, entry, app.checklistInfo, app.ticketNotes, aiOn, useAiDraft]);
+  const showingAi = tab === "report" && aiOn && useAiDraft && !!entry.aiDraft;
+  const draftAi = async () => {
+    ctl.current?.abort();
+    const c = new AbortController(); ctl.current = c;
+    setAiBusy(true); setAiErr(null);
+    try { await app.draftWithAi(c.signal); setUseAiDraft(true); setTab("report"); }
+    catch (e) { if (e.name !== "AbortError") setAiErr(e); }
+    finally { if (ctl.current === c) setAiBusy(false); }
+  };
   const masked = mask ? maskText(texts[tab], { client: f.client, others: [app.pbRow?.email, app.pbRow?.contact, (app.pbRow?.email || "").split("@")[1]], users: an.users, hosts: an.hosts, ips: an.ips.internal }) : null;
   const text = masked ? masked.text : texts[tab];
-  const checks = tab === "report" ? reportChecks(an, f) : [];
+  const checks = tab === "report" && !showingAi ? reportChecks(an, f) : [];
   const names = { report: "Assessment report", email: "Client escalation email", handover: "Shift handover note" };
   return (
     <div className="drafts" data-testid="drafts">
@@ -154,6 +172,13 @@ function Drafts({ app }) {
           {checks.map((c) => <li key={c}><AlertTriangle size={13} /> {c}</li>)}
         </ul>
       )}
+      {showingAi && <p className="review small" data-testid="ai-drafted-notice"><AlertTriangle size={13} /> Drafted by AI – review before use. Check every number, IP and the verdict against the logs.</p>}
+      {aiErr && (
+        <div className="err small" data-testid="ai-draft-error">
+          {aiErr.message}
+          {aiErr.details?.issues?.length > 0 && <ul>{aiErr.details.issues.map((i) => <li key={i}>{i}</li>)}</ul>}
+        </div>
+      )}
       {masked && (
         <div className="mask-preview small" data-testid="mask-preview">
           Masked {masked.items.length} value{masked.items.length === 1 ? "" : "s"}: {masked.items.map((i) => <span key={i.token} className="chip mono">{i.val} → {i.token}</span>)}
@@ -163,7 +188,10 @@ function Drafts({ app }) {
         <>
           <label className="check small"><input type="checkbox" checked={mask} onChange={(e) => setMask(e.target.checked)} data-testid="mask-toggle" /> Mask names &amp; internal IPs</label>
           <button className="btn btn-sm" onClick={() => download(`${f.ticketId || "ticket"}-${tab}.txt`, text)} data-testid={`draft-${tab}-download`}><Download size={13} /> .txt</button>
-          <button className="btn btn-sm" onClick={() => app.askAi({ mode: "draft" })} data-testid="draft-with-ai-btn"><Sparkles size={13} /> Draft with AI</button>
+          {aiOn && tab === "report" && entry.aiDraft && <label className="check small"><input type="checkbox" checked={useAiDraft} onChange={(e) => setUseAiDraft(e.target.checked)} data-testid="use-ai-draft-toggle" /> Show AI draft</label>}
+          {aiOn && (aiBusy
+            ? <button className="btn btn-sm" onClick={() => { ctl.current?.abort(); setAiBusy(false); }} data-testid="draft-with-ai-stop"><Loader2 size={13} className="spin" /> Drafting… <Square size={11} /></button>
+            : <button className="btn btn-sm" onClick={draftAi} data-testid="draft-with-ai-btn"><Sparkles size={13} /> {entry.aiDraft ? "Redraft with AI" : "Draft with AI"}</button>)}
           <button className={`btn btn-sm ${entry.escalatedAt ? "" : "btn-danger"}`} onClick={toggleEscalated} data-testid="mark-escalated-btn">{entry.escalatedAt ? "Undo escalated" : "Mark as escalated"}</button>
         </>
       } />

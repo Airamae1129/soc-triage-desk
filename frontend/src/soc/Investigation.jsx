@@ -73,7 +73,7 @@ function Timeline({ an, onExplain }) {
               <div className="pill-row">
                 {r.techs.map((t) => <span key={t} className="pill sev-high mono">{t}</span>)}
                 {r.blocked && <span className="pill sev-low">Blocked</span>}
-                <button className="btn btn-xs tl-explain" onClick={() => onExplain(r.raw)} data-testid={`timeline-explain-${i}`}><Sparkles size={11} /> Explain</button>
+                {onExplain && <button className="btn btn-xs tl-explain" onClick={() => onExplain(r.raw)} data-testid={`timeline-explain-${i}`}><Sparkles size={11} /> Explain</button>}
               </div>
               <code className="mono brk tl-line">{r.raw}</code>
             </div>
@@ -86,8 +86,8 @@ function Timeline({ an, onExplain }) {
 
 export default function Investigation({ app }) {
   const [mode, setMode] = useState(() => load("invMode", "ticket"));
-  const [paste, setPaste] = useState(() => load("invPaste", ""));
-  const [applied, setApplied] = useState(() => load("invPaste", ""));
+  const [paste, setPaste] = useState("");
+  const [applied, setApplied] = useState("");
   const [lang, setLang] = useState(() => load("invLang", "sentinel"));
   const [hint, setHint] = useState("");
   useEffect(() => { save("invMode", mode); save("invLang", lang); }, [mode, lang]);
@@ -99,7 +99,7 @@ export default function Investigation({ app }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [srcText]);
   const queries = useMemo(() => buildQueries(an, lang), [an, lang]);
-  const suggest = () => { setApplied(paste); save("invPaste", paste); };
+  const suggest = () => { setApplied(paste); };
   return (
     <div className="stack" data-testid="investigation-tab">
       <Panel title="Alert logs" testid="alert-logs-panel" right={
@@ -113,7 +113,7 @@ export default function Investigation({ app }) {
             <textarea className="input mono ta-logs" value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste alert logs from any source" spellCheck={false} data-testid="investigation-logs-input" />
             <div className="btn-row">
               <button className="btn btn-primary" onClick={suggest} data-testid="suggest-queries-btn">Suggest queries</button>
-              <button className="btn" onClick={() => { setPaste(""); setApplied(""); save("invPaste", ""); setHint(""); }} data-testid="investigation-clear-btn">Clear</button>
+              <button className="btn" onClick={() => { setPaste(""); setApplied(""); setHint(""); }} data-testid="investigation-clear-btn">Clear</button>
               <button className="btn btn-ghost" onClick={() => { setPaste(SAMPLE_B.rawLogs); setApplied(SAMPLE_B.rawLogs); }} data-testid="investigation-sample-btn">Load sample</button>
             </div>
           </>
@@ -136,7 +136,7 @@ export default function Investigation({ app }) {
                   <span className="basis mono">{q.basis}</span>
                   <h3 className="qtitle">{q.title}</h3>
                   <p className="muted small">{q.why}</p>
-                  <CopyBlock text={q.query} testid={`query-text-${i}`} />
+                  <CopyBlock text={q.query} testid={`query-text-${i}`} raw />
                   <footer className="qrun small muted">Run with · {q.run.set} · {q.run.range} · {q.run.path}</footer>
                 </article>
               ))}
@@ -145,7 +145,7 @@ export default function Investigation({ app }) {
         </div>
         <div className="col">
           <Checklist app={app} />
-          <Timeline an={an} onExplain={(line) => app.askAi({ mode: "explain", line })} />
+          <Timeline an={an} onExplain={app.aiConfig?.ai ? (line) => app.askAi({ mode: "explain", line }) : null} />
         </div>
       </div>
     </div>

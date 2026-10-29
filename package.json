@@ -1,0 +1,59 @@
+{
+  "name": "soc-triage-desk",
+  "version": "2.0.0",
+  "private": true,
+  "description": "SOC Triage Playbook: internal alert triage console (Express + TypeScript + Prisma backend serving the React frontend)",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm run build:ui:if-missing && tsx watch --clear-screen=false src/server.ts",
+    "dev:ui": "concurrently -k -n api,ui -c blue,magenta \"tsx watch --clear-screen=false src/server.ts\" \"npm --prefix frontend run start:proxy\"",
+    "build": "npm run build:ui && npm run build:server",
+    "build:server": "prisma generate && tsc -p tsconfig.build.json",
+    "build:ui": "npm --prefix frontend run build:public",
+    "build:ui:if-missing": "node scripts/build-ui-if-missing.mjs",
+    "start": "node dist/src/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "seed": "tsx prisma/seed.ts",
+    "create-admin": "tsx src/auth/create-admin.ts",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@google/genai": "^2.32.0",
+    "@prisma/client": "^6.19.3",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.4.2",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.2",
+    "express-session": "^1.19.0",
+    "helmet": "^8.3.0",
+    "pino": "^10.4.0",
+    "pino-http": "^11.0.0",
+    "prisma": "^6.19.3",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.19.0",
+    "@types/node": "^20.19.43",
+    "@types/supertest": "^6.0.3",
+    "concurrently": "^9.2.5",
+    "supertest": "^7.3.1",
+    "typescript": "5.9",
+    "vitest": "^3.2.7"
+  },
+  "allowScripts": {
+    "prisma@6.19.3": true,
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.2": true
+  }
+}

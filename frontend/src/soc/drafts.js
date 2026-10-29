@@ -137,10 +137,48 @@ export function buildHandover(an, f, { entry, checklist, osint, notes, pbRow }) 
     "DONE THIS SHIFT", ...doneL, "", "PENDING FOR NEXT SHIFT", ...pend].filter((l, i, a) => !(l === "" && a[i - 1] === "")).join("\n");
 }
 
-export function osintSummary(f, iocs, osint) {
-  if (!iocs.length) return "No external indicators for this ticket.";
-  return [`OSINT results – ${f.ticketId || "no ticket"}${f.client ? ` · ${f.client}` : ""}`,
-    ...iocs.map((i) => { const o = osint?.[i.value] || {}; return `- ${i.type} ${i.value}: ${o.verdict || "Not checked"}${o.note ? ` – ${o.note}` : ""}`; })].join("\n");
+/* One source line in the OSINT copy block. Not looked up yet -> "Not checked". */
+function osintSrc(name, s, err) {
+  if (err) return err;
+  if (!s) return "Not checked";
+  if (name === "abuseipdb") return `${s.score}% abuse confidence, ${s.reports} reports${s.isp ? ` – ${s.isp}` : ""}${s.country ? ` (${s.country})` : ""}${s.usageType || s.usage ? `, ${s.usageType || s.usage}` : ""}`;
+  if (name === "virustotal") return s.found ? `${s.malicious}/${s.total} malicious, ${s.suspicious} suspicious${s.asOwner || s.as_owner ? ` – ${s.asOwner || s.as_owner}` : ""}` : "Not found";
+  const link = s.latest?.result?.replace("/api/v1/result/", "/result/");
+  return `${s.hits} existing scans, ${s.malicious ? `${s.malicious} flagged malicious` : "none flagged malicious"}${link ? ` – latest: ${link}` : ""}`;
+}
+
+/* Does a screenshot (taken from the Screenshotbase URL field) belong to this URL/domain indicator? */
+const normUrl = (u) => String(u || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+const hostOf = (u) => normUrl(u).split(/[/?#]/)[0].replace(/^www\./, "");
+const shotMatches = (ioc, s) => (ioc.type === "Domain" ? hostOf(s.page) === ioc.value.replace(/^www\./, "") : normUrl(s.page) === normUrl(ioc.value));
+
+/* Sources per indicator type:
+   IP -> AbuseIPDB, VirusTotal
+   URL / Domain -> VirusTotal, URLscan.io, plus Screenshotbase only when the analyst generated one for it
+   Hash -> VirusTotal */
+export function osintSummary(f, iocs, osint, shots = []) {
+  const grp = { IP: [], Web: [], Hash: [] };
+  iocs.forEach((i) => grp[i.type === "IP" ? "IP" : i.type === "URL" || i.type === "Domain" ? "Web" : "Hash"].push(i));
+  const used = new Set();
+  const block = (i, sources) => {
+    const o = osint?.[i.value] || {};
+    const a = o.auto || {};
+    const L = [`${i.value}${i.type !== "IP" ? ` (${i.type})` : ""}`,
+      ...sources.map(([k, label]) => `${label}: ${osintSrc(k, a.sources?.[k], a.errors?.[k])}`)];
+    if (i.type === "URL" || i.type === "Domain") {
+      shots.filter((s) => shotMatches(i, s)).forEach((s) => { used.add(s.url); L.push(`Screenshotbase (URL to image): ${s.url}`); });
+    }
+    L.push(`Verdict: ${o.verdict || "Not checked"}${o.note && (o.manual || !o.auto) ? ` – ${o.note}` : ""}`);
+    return L.join("\n");
+  };
+  const L = [];
+  if (grp.IP.length) L.push("IP(s) Reputation:", grp.IP.map((i) => block(i, [["abuseipdb", "AbuseIPDB"], ["virustotal", "VirusTotal"]])).join("\n\n"), "");
+  if (grp.Web.length) L.push("URL/Domain Reputation:", grp.Web.map((i) => block(i, [["virustotal", "VirusTotal"], ["urlscan", "URLscan.io"]])).join("\n\n"), "");
+  if (grp.Hash.length) L.push("File Hash Reputation:", grp.Hash.map((i) => block(i, [["virustotal", "VirusTotal"]])).join("\n\n"), "");
+  // Screenshots of URLs the analyst typed that aren't indicators on this ticket.
+  const rest = shots.filter((s) => !used.has(s.url));
+  if (rest.length) L.push("Screenshotbase (URL to image):", ...rest.map((s) => `${s.page} → ${s.url}`), "");
+  return L.length ? L.join("\n").trim() : "Nothing in results yet. Add indicators to check.";
 }
 
 export function reportChecks(an, f) {

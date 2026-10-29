@@ -12,7 +12,43 @@ export const save = (k, v) => {
     localStorage.setItem(P + k, JSON.stringify(v));
   } catch {}
 };
-export const STORE_KEYS = ["history", "currentId", "playbooks", "notes", "osint", "checklist", "analyst", "seeded"];
+export const STORE_KEYS = ["history", "currentId", "playbooks", "notes", "osint", "checklist", "analyst", "seeded", "defang"];
+
+/* ---------- Defanging (IPs, domains, URLs, emails) for copied text ---------- */
+// Endings that are file names, not domains (svchost.exe, report.pdf …).
+const FILE_EXT = new Set("exe dll sys ps1 psm1 psd1 bat cmd vbs vbe js jse wsf hta lnk scr msi msp iso img vhd zip rar 7z gz tgz tar cab doc docx docm dot xls xlsx xlsm xlsb ppt pptx pptm one pdf rtf txt log csv tsv json xml html htm mht ini cfg conf dat tmp bak old png jpg jpeg gif svg webp bmp ico py sh pl rb php asp aspx jsp db sqlite sql evtx etl md yml yaml toml jar class apk dmg pkg deb rpm".split(" "));
+const DEFANG_RE = new RegExp([
+  /\bhttps?:\/\/[^\s<>"'`)\]]+/.source,                                                   // 1 URL
+  /\b[\w.+%-]+@(?:[A-Za-z0-9-]+\.)+[a-z]{2,24}\b/.source,                                  // 2 email
+  /\b(?:\d{1,3}\.){3}\d{1,3}\b/.source,                                                    // 3 IPv4
+  /\b(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[a-z]{2,24}\b/.source,            // 4 domain (lower-case TLD)
+].map((s) => `(${s})`).join("|"), "g");
+const dots = (s) => s.replace(/\./g, "[.]");
+// OSINT source names used as labels ("URLscan.io: ...") are not indicators.
+const SOURCE_NAMES = new Set(["urlscan.io", "virustotal.com", "abuseipdb.com", "screenshotbase.com"]);
+
+/** example.com -> example[.]com, 1.2.3.4 -> 1[.]2[.]3[.]4, https:// -> hxxps://, a@b.com -> a[@]b[.]com.
+ *  Image links (screenshots) and file names are left alone. */
+export function defangText(text) {
+  return String(text ?? "").replace(DEFANG_RE, (m, url, email, ip, dom) => {
+    if (url) {
+      if (/\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(url)) return url;
+      const [, scheme, host, rest] = url.match(/^(https?):\/\/([^/?#]*)(.*)$/i);
+      return `${scheme.replace(/t/gi, "x")}://${dots(host)}${rest}`;
+    }
+    if (email) { const [u, d] = email.split("@"); return `${u}[@]${dots(d)}`; }
+    if (ip) return ip.split(".").every((o) => +o <= 255) ? dots(ip) : ip;
+    const tld = dom.slice(dom.lastIndexOf(".") + 1);
+    return FILE_EXT.has(tld) || SOURCE_NAMES.has(dom.toLowerCase()) ? dom : dots(dom);
+  });
+}
+
+// Shared "Defang indicators" preference (one switch for every copy box), kept in localStorage.
+let defangOn = load("defang", false);
+const defangSubs = new Set();
+export const getDefang = () => defangOn;
+export const setDefang = (v) => { defangOn = !!v; save("defang", defangOn); defangSubs.forEach((f) => f()); };
+export const subscribeDefang = (f) => { defangSubs.add(f); return () => defangSubs.delete(f); };
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const pad = (n) => String(n).padStart(2, "0");
